@@ -16,7 +16,7 @@ from backend import APIBackend
 class APIManager(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("API Prompt Manager")
+        self.setWindowTitle("PromtPilot")
         self.setMinimumSize(900, 650)
 
         # Backend-Instanz
