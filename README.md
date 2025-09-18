@@ -1,2 +1,2 @@
-# PromptPilot-Vertiefungsarbeit-Cian-Vonlanthen-Malik-Zehnder
+# PromptPilot Vertiefungsarbeit Cian Vonlanthen und Malik Zehnder
 In diesem Repository befindet sich unser selbst entwickeltes Tool PromptPilot. Dieses haben wir im Rahmen unserer Vertiefungsarbeit entwickelt, um einen persönlichen Use Case, den wir lösen wollten, abzudecken.
