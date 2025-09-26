@@ -225,7 +225,7 @@ class APIManager(QMainWindow):
     def apply_stylesheets(self):
         dark_mode = "dark" if self.dark_mode_enabled else "light"
         self.setStyleSheet(f"""
-            QWidget {{
+ QWidget {{
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica', sans-serif;
                 font-size: 14px;
             }}
@@ -243,15 +243,15 @@ class APIManager(QMainWindow):
                 font-weight: bold;
             }}
             #menu_button {{
-                background-color: transparent;
-                color: #cccccc;
+                background-color: #0d6efd;
+                color: white;
                 text-align: left;
                 padding: 12px 15px;
                 border: none;
                 border-radius: 6px;
             }}
             #menu_button:hover {{
-                background-color: rgba(255, 255, 255, 0.1);
+                background-color: #0b5ed7;
                 color: white;
             }}
             QPushButton {{
@@ -268,17 +268,17 @@ class APIManager(QMainWindow):
                 background-color: #0a58ca;
             }}
             QPushButton#save_btn {{
-                background-color: #198754;
+                background-color: #0d6efd;
             }}
             QPushButton#save_btn:hover {{
-                background-color: #157347;
+                background-color: #0b5ed7;
             }}
             QPushButton#test_btn {{
-                background-color: #ffc107;
-                color: #212529;
+                background-color: #0d6efd;
+                color: white;
             }}
             QPushButton#test_btn:hover {{
-                background-color: #ffca2c;
+                background-color: #0b5ed7;
             }}
             QLineEdit, QComboBox {{
                 padding: 8px;
@@ -333,34 +333,35 @@ class APIManager(QMainWindow):
                 color: #ffffff;
             }}
             #menu_button {{
-                color: #e0e0e0;
+                background-color: #0d6efd;
+                color: white;
             }}
             #menu_button:hover {{
-                background-color: rgba(255, 255, 255, 0.1);
-                color: #ffffff;
+                background-color: #0b5ed7;
+                color: white;
             }}
             QPushButton {{
-                background-color: #007bff;
+                background-color: #0d6efd;
                 color: white;
             }}
             QPushButton:hover {{
-                background-color: #0069d9;
+                background-color: #0b5ed7;
             }}
             QPushButton:pressed {{
-                background-color: #0056b3;
+                background-color: #0a58ca;
             }}
             QPushButton#save_btn {{
-                background-color: #28a745;
+                background-color: #0d6efd;
             }}
             QPushButton#save_btn:hover {{
-                background-color: #218838;
+                background-color: #0b5ed7;
             }}
             QPushButton#test_btn {{
-                background-color: #ffc107;
-                color: #212529;
+                background-color: #0d6efd;
+                color: white;
             }}
             QPushButton#test_btn:hover {{
-                background-color: #ffca2c;
+                background-color: #0b5ed7;
             }}
             QLineEdit, QComboBox {{
                 background-color: #2c2c2c;
