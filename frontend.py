@@ -225,7 +225,8 @@ class APIManager(QMainWindow):
     def apply_stylesheets(self):
         dark_mode = "dark" if self.dark_mode_enabled else "light"
         self.setStyleSheet(f"""
- QWidget {{
+                           
+            QWidget {{
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica', sans-serif;
                 font-size: 14px;
             }}
@@ -280,13 +281,15 @@ class APIManager(QMainWindow):
             QPushButton#test_btn:hover {{
                 background-color: #0b5ed7;
             }}
-            QLineEdit, QComboBox {{
+            /* LIGHT MODE: QTextEdit hinzugefügt */
+            QLineEdit, QComboBox, QTextEdit {{
                 padding: 8px;
                 border: 1px solid #ced4da;
                 border-radius: 6px;
                 background-color: white;
             }}
-            QLineEdit:focus, QComboBox:focus {{
+            /* LIGHT MODE: QTextEdit hinzugefügt */
+            QLineEdit:focus, QComboBox:focus, QTextEdit:focus {{
                 border: 1px solid #86b7fe;
                 outline: 2px solid rgba(13, 110, 253, 0.25);
             }}
@@ -363,11 +366,13 @@ class APIManager(QMainWindow):
             QPushButton#test_btn:hover {{
                 background-color: #0b5ed7;
             }}
-            QLineEdit, QComboBox {{
+            /* DARK MODE: QTextEdit hinzugefügt */
+            QLineEdit, QComboBox, QTextEdit {{
                 background-color: #2c2c2c;
                 color: #e0e0e0;
             }}
-            QLineEdit:focus, QComboBox:focus {{
+            /* DARK MODE: QTextEdit hinzugefügt */
+            QLineEdit:focus, QComboBox:focus, QTextEdit:focus {{
                 border: 1px solid #007bff;
                 outline: 2px solid rgba(0, 123, 255, 0.25);
             }}
@@ -390,7 +395,7 @@ class APIManager(QMainWindow):
             #empty_message {{
                 color: #a0a0a0;
             }}
-        """)
+""")
 
     def save_credentials(self, api_key, api_url):
         if self.backend.save_credentials(api_key, api_url):
