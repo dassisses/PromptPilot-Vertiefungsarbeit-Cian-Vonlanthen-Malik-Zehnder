@@ -317,6 +317,21 @@ class APIManager(QMainWindow):
                 background-color: #0b5ed7;
             }
             
+            QPushButton#btn_secondary {
+                background-color: transparent;
+                color: #ffffff;
+                border: 2px solid #0d6efd;
+            }
+            
+            QPushButton#btn_secondary:hover {
+                background-color: rgba(13, 110, 253, 0.1);
+                border: 2px solid #0d6efd;
+            }
+            
+            QPushButton#btn_secondary:pressed {
+                background-color: rgba(13, 110, 253, 0.2);
+            }
+            
             #preset_card {
                 background: linear-gradient(135deg, #1e1e1e 0%, #2c2c2c 100%);
                 border: 1px solid #3c3c3c;
@@ -641,7 +656,7 @@ class HomePage(BasePage):
             self.update_presets_list()
             self.clear_form()
         else:
-            self.controller.show_toast("Fehler beim Speichern des Presets")
+            self.controller.show_toast("Fehler beim Speichern")
 
     def edit_preset(self, index):
         if 0 <= index < len(self.controller.presets):
@@ -662,14 +677,13 @@ class HomePage(BasePage):
                 QMessageBox.No
             )
             if reply == QMessageBox.Yes:
-                # Lösche über Backend
-                if self.controller.backend.delete_preset(index):
-                    # Aktualisiere die lokale Presets-Liste
-                    self.controller.presets = self.controller.backend.presets
-                    self.controller.show_toast(f"'{p['name']}' gelöscht")
-                    self.update_presets_list()
-                else:
-                    self.controller.show_toast("Fehler beim Löschen des Presets")
+                # Entferne das Preset aus der Backend-Liste
+                if hasattr(self.controller.backend, 'presets') and isinstance(self.controller.backend.presets, list):
+                    if index < len(self.controller.backend.presets):
+                        self.controller.backend.presets.pop(index)
+                
+                self.controller.show_toast(f"'{p['name']}' gelöscht")
+                self.update_presets_list()
 
     def clear_form(self):
         self.preset_name_input.clear()
