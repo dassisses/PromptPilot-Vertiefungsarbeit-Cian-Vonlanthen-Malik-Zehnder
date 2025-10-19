@@ -113,7 +113,7 @@ class APIManager(QMainWindow):
         bottom = QWidget()
         bottom_layout = QVBoxLayout(bottom)
         bottom_layout.setContentsMargins(16, 12, 16, 12)
-        info = QLabel("PromptPilot v1.0")
+        info = QLabel("PomptPilot by Cian and Malik")
         info.setObjectName("sidebar_info")
         info.setAlignment(Qt.AlignCenter)
         info.setFont(QFont("Segoe UI", 10))
