@@ -1,7 +1,7 @@
 import sys
 import pyperclip
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont, QAction, QKeySequence
+from PySide6.QtGui import QFont, QAction, QKeySequence, QPalette, QColor
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QLineEdit,
     QVBoxLayout, QHBoxLayout, QPushButton, QComboBox,
@@ -16,6 +16,9 @@ class APIManager(QMainWindow):
         super().__init__()
         self.setWindowTitle("PromptPilot")
         self.setMinimumSize(1400, 900)
+
+        # Erzwinge Dark Mode
+        self.force_dark_mode()
 
         self.backend = APIBackend()
         self.current_page_index = 0
@@ -60,6 +63,24 @@ class APIManager(QMainWindow):
         self.toast_label.hide()
         self.toast_timer = QTimer(self)
         self.toast_timer.timeout.connect(self.hide_toast)
+
+    def force_dark_mode(self):
+        """Erzwingt Dark Mode für die gesamte Anwendung"""
+        palette = QPalette()
+        palette.setColor(QPalette.Window, QColor(18, 18, 18))
+        palette.setColor(QPalette.WindowText, QColor(224, 224, 224))
+        palette.setColor(QPalette.Base, QColor(30, 30, 30))
+        palette.setColor(QPalette.AlternateBase, QColor(44, 44, 44))
+        palette.setColor(QPalette.ToolTipBase, QColor(224, 224, 224))
+        palette.setColor(QPalette.ToolTipText, QColor(224, 224, 224))
+        palette.setColor(QPalette.Text, QColor(224, 224, 224))
+        palette.setColor(QPalette.Button, QColor(30, 30, 30))
+        palette.setColor(QPalette.ButtonText, QColor(224, 224, 224))
+        palette.setColor(QPalette.BrightText, Qt.red)
+        palette.setColor(QPalette.Link, QColor(13, 110, 253))
+        palette.setColor(QPalette.Highlight, QColor(13, 110, 253))
+        palette.setColor(QPalette.HighlightedText, Qt.white)
+        self.setPalette(palette)
 
     def create_top_nav(self):
         self.top_nav = QWidget()
