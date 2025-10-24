@@ -554,6 +554,8 @@ class HomePage(BasePage):
 
         save_btn = QPushButton("Speichern")
         save_btn.setObjectName("btn_success")
+        save_btn.setMinimumWidth(100)  # Add minimum width
+        save_btn.setFixedHeight(36)  # Add fixed height
         save_btn.clicked.connect(self.save_new_preset)
         btn_layout.addWidget(save_btn)
 
