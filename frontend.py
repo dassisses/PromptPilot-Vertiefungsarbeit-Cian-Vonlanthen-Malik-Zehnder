@@ -17,7 +17,7 @@ class APIManager(QMainWindow):
         self.setWindowTitle("PromptPilot")
         self.setMinimumSize(1400, 900)
 
-        # Erzwinge Dark Mode
+        # Erzwinge Dark Mode - unabhängig von Systemeinstellungen
         self.force_dark_mode()
 
         self.backend = APIBackend()
@@ -65,7 +65,11 @@ class APIManager(QMainWindow):
         self.toast_timer.timeout.connect(self.hide_toast)
 
     def force_dark_mode(self):
-        """Erzwingt Dark Mode für die gesamte Anwendung"""
+        """Erzwingt Dark Mode für die gesamte Anwendung - unabhängig von Systemeinstellungen"""
+        # Setze App-weite Style auf Fusion für konsistentes Dark Theme
+        QApplication.setStyle("Fusion")
+        
+        # Erstelle Dark Palette
         palette = QPalette()
         palette.setColor(QPalette.Window, QColor(18, 18, 18))
         palette.setColor(QPalette.WindowText, QColor(224, 224, 224))
@@ -76,10 +80,18 @@ class APIManager(QMainWindow):
         palette.setColor(QPalette.Text, QColor(224, 224, 224))
         palette.setColor(QPalette.Button, QColor(30, 30, 30))
         palette.setColor(QPalette.ButtonText, QColor(224, 224, 224))
-        palette.setColor(QPalette.BrightText, Qt.red)
+        palette.setColor(QPalette.BrightText, QColor(255, 0, 0))
         palette.setColor(QPalette.Link, QColor(13, 110, 253))
         palette.setColor(QPalette.Highlight, QColor(13, 110, 253))
-        palette.setColor(QPalette.HighlightedText, Qt.white)
+        palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
+        
+        # Deaktivierte Elemente
+        palette.setColor(QPalette.Disabled, QPalette.Text, QColor(128, 128, 128))
+        palette.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(128, 128, 128))
+        palette.setColor(QPalette.Disabled, QPalette.WindowText, QColor(128, 128, 128))
+        
+        # Wende Palette auf die gesamte Anwendung an
+        QApplication.instance().setPalette(palette)
         self.setPalette(palette)
 
     def create_top_nav(self):
@@ -134,7 +146,7 @@ class APIManager(QMainWindow):
         bottom = QWidget()
         bottom_layout = QVBoxLayout(bottom)
         bottom_layout.setContentsMargins(16, 12, 16, 12)
-        info = QLabel("PomptPilot by Cian and Malik")
+        info = QLabel("PromptPilot by Cian and Malik")
         info.setObjectName("sidebar_info")
         info.setAlignment(Qt.AlignCenter)
         info.setFont(QFont("Segoe UI", 10))
@@ -195,6 +207,8 @@ class APIManager(QMainWindow):
             QWidget {
                 font-family: 'Segoe UI', Arial, sans-serif;
                 font-size: 13px;
+                background-color: #121212;
+                color: #e0e0e0;
             }
             
             QMainWindow {
@@ -293,6 +307,26 @@ class APIManager(QMainWindow):
                 border: 2px solid #0d6efd;
                 padding: 9px 11px;
                 background-color: #1e1e1e;
+            }
+            
+            QComboBox::drop-down {
+                border: none;
+                width: 30px;
+            }
+            
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 6px solid #a0a0a0;
+                margin-right: 8px;
+            }
+            
+            QComboBox QAbstractItemView {
+                background-color: #2c2c2c;
+                color: #e0e0e0;
+                border: 1px solid #3c3c3c;
+                selection-background-color: #0d6efd;
             }
             
             QPushButton {
@@ -403,6 +437,19 @@ class APIManager(QMainWindow):
             
             QScrollBar::handle:vertical:hover {
                 background-color: #0d6efd;
+            }
+            
+            QMessageBox {
+                background-color: #1e1e1e;
+                color: #e0e0e0;
+            }
+            
+            QMessageBox QLabel {
+                color: #e0e0e0;
+            }
+            
+            QMessageBox QPushButton {
+                min-width: 80px;
             }
         """)
 
@@ -547,19 +594,24 @@ class HomePage(BasePage):
 
         form_layout.addSpacing(8)
 
+        # Button Container mit nur einem "Hinzufügen" Button
         btn_container = QWidget()
-        btn_layout = QHBoxLayout(btn_container)
+        btn_layout = QVBoxLayout(btn_container)
         btn_layout.setContentsMargins(0, 0, 0, 0)
         btn_layout.setSpacing(10)
 
-        save_btn = QPushButton("Speichern")
-        save_btn.setObjectName("btn_success")
-        save_btn.setMinimumWidth(100)  # Add minimum width
-        save_btn.setFixedHeight(36)  # Add fixed height
-        save_btn.clicked.connect(self.save_new_preset)
-        btn_layout.addWidget(save_btn)
+        # Hauptbutton: Hinzufügen
+        add_btn = QPushButton("Hinzufügen")
+        add_btn.setObjectName("btn_success")
+        add_btn.setMinimumWidth(100)
+        add_btn.setFixedHeight(40)
+        add_btn.clicked.connect(self.save_new_preset)
+        btn_layout.addWidget(add_btn)
 
+        # Sekundärbutton: Zurücksetzen
         reset_btn = QPushButton("Zurücksetzen")
+        reset_btn.setObjectName("btn_secondary")
+        reset_btn.setFixedHeight(36)
         reset_btn.clicked.connect(self.clear_form)
         btn_layout.addWidget(reset_btn)
 
@@ -673,7 +725,7 @@ class HomePage(BasePage):
             self.controller.show_toast("Name und Prompt erforderlich")
             return
 
-        # Speichere über Backend
+        # Speichere über Backend - dies speichert automatisch in JSON
         if self.controller.backend.save_preset(name, prompt, api_type):
             self.controller.show_toast(f"Preset '{name}' gespeichert")
             self.update_presets_list()
@@ -700,10 +752,12 @@ class HomePage(BasePage):
                 QMessageBox.No
             )
             if reply == QMessageBox.Yes:
-                # Entferne das Preset aus der Backend-Liste
+                # Entferne das Preset aus der Backend-Liste und speichere
                 if hasattr(self.controller.backend, 'presets') and isinstance(self.controller.backend.presets, list):
                     if index < len(self.controller.backend.presets):
                         self.controller.backend.presets.pop(index)
+                        # Speichere die Änderungen in die JSON-Datei
+                        self.controller.backend.save_presets()
                 
                 self.controller.show_toast(f"'{p['name']}' gelöscht")
                 self.update_presets_list()
@@ -1045,6 +1099,10 @@ class CredentialsPage(BasePage):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    
+    # Setze Fusion Style für konsistentes Dark Theme
+    app.setStyle("Fusion")
+    
     window = APIManager()
     window.show()
     sys.exit(app.exec())
