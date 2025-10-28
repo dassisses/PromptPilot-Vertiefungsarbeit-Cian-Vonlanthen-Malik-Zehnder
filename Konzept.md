@@ -1,18 +1,16 @@
-# PromptPilot - Projektkonzept
-
-## 1. Einleitung
+### Einleitung
 
 Dieses Dokument enthält die vollständige Planung des Projekts **PromptPilot**. Es beschreibt die grundlegenden Ideen und Strukturen, die für die Entwicklung des Tools wichtig sind.
 
-### 1.1 Projektziel
+#### Projektziel
 
 Das Ziel ist es, ein Python-basiertes Tool zu entwickeln, um einen persönlichen Use Case zu lösen: die Automatisierung repetitiver Aufgaben bei der Nutzung von Large Language Models (LLMs).
 
-### 1.2 Problemstellung
+#### Problemstellung
 
 Wir nutzen LLMs (wie ChatGPT, Claude, etc.) häufig im privaten Bereich. Dabei gibt es bestimmte Aufgaben, die sehr repetitiv sind - wir verwenden immer wieder die gleichen Prompts und müssen die Ergebnisse manuell in die gewünschte Applikation einfügen.
 
-#### Beispiel-Workflow (aktuell):
+##### Beispiel-Workflow (aktuell):
 
 1. Ich schreibe ein Motivationsschreiben für eine Bewerbung
 2. Ich möchte den Text auf Rechtschreibung prüfen und korrigieren lassen
@@ -22,7 +20,7 @@ Wir nutzen LLMs (wie ChatGPT, Claude, etc.) häufig im privaten Bereich. Dabei g
    - Korrigierten Text kopieren
    - Text in mein Dokument einfügen
 
-### 1.3 Lösungsansatz
+#### Lösungsansatz
 
 Dieser Prozess soll wie folgt automatisiert werden:
 
@@ -40,20 +38,20 @@ Dieser Prozess soll wie folgt automatisiert werden:
 
 ---
 
-## 2. Technische Umsetzung
+### Technische Umsetzung
 
-### 2.1 Programmiersprache
+#### Programmiersprache
 
 Das gesamte Tool wird in **Python** entwickelt.
 
-### 2.2 Architektur
+#### Architektur
 
 Die Anwendung wird in **Frontend** und **Backend** unterteilt, um:
 - Die Entwicklung übersichtlicher zu gestalten
 - Paralleles Arbeiten zu ermöglichen
 - Klare Trennung der Verantwortlichkeiten zu gewährleisten
 
-### 2.3 Architektur-Übersicht
+#### Architektur-Übersicht
 
 ```mermaid
 graph TB
@@ -103,14 +101,14 @@ graph TB
 
 ---
 
-## 3. Frontend
+### Frontend
 
-### 3.1 Technologie
+#### Technologie
 
 - **Sprache**: Python
 - **Framework**: PySide6 (Qt for Python)
 
-### 3.2 Verantwortlichkeiten
+#### Verantwortlichkeiten
 
 Das Frontend ist zuständig für:
 - Grafische Benutzeroberfläche (GUI)
@@ -120,7 +118,7 @@ Das Frontend ist zuständig für:
 - Shortcut-Verwaltung und -Ausführung
 - Einfügen von Ergebnissen in die Zwischenablage
 
-### 3.3 GUI-Design-Anforderungen
+#### GUI-Design-Anforderungen
 
 Das GUI soll:
 - ✓ Modern und benutzerfreundlich sein
@@ -128,7 +126,7 @@ Das GUI soll:
 - ✓ Nicht mit unnötigem Schnickschnack überladen sein
 - ✓ Klare Navigation und intuitive Bedienung bieten
 
-### 3.4 GUI-Struktur
+#### GUI-Struktur
 
 Das Hauptfenster ist in drei Hauptbereiche unterteilt:
 
@@ -140,7 +138,7 @@ graph LR
     MAIN --> TAB3[Tab: Einstellungen]
 ```
 
-#### 3.4.1 Tab 1: Presets
+##### Tab 1: Presets
 
 **Layout-Beschreibung:**
 ```
@@ -217,7 +215,7 @@ graph LR
 └─────────────────────────────────────────────────┘
 ```
 
-#### 3.4.2 Tab 2: API Credentials
+##### Tab 2: API Credentials
 
 **Layout-Beschreibung:**
 ```
@@ -281,7 +279,7 @@ graph LR
 └─────────────────────────────────────────────────┘
 ```
 
-#### 3.4.3 Tab 3: Einstellungen
+##### Tab 3: Einstellungen
 
 **Layout-Beschreibung:**
 ```
@@ -330,7 +328,7 @@ graph LR
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 3.5 System Tray Integration
+#### System Tray Integration
 
 **Menu-Struktur:**
 ```
@@ -355,14 +353,14 @@ graph LR
 - Presets neu laden (falls manuell editiert)
 - Beenden der Anwendung
 
-### 3.6 Hintergrund-Modus
+#### Hintergrund-Modus
 
 - Das Frontend muss im normalen Gebrauch nicht geöffnet sein
 - Es wird nur für die Verwaltung von Presets und Credentials benötigt
 - **Minimierung**: Das Fenster kann geschlossen werden, während die Anwendung im Hintergrund weiterläuft
 - **Reaktivierung**: Im Einstellungs-Tab kann ein Shortcut definiert werden (oder der vordefinierte verwendet werden), um das GUI wieder zu öffnen
 
-### 3.7 Shortcut-Interaktion
+#### Shortcut-Interaktion
 
 Die Interaktion via Shortcut erfolgt über das Frontend:
 
@@ -407,9 +405,9 @@ sequenceDiagram
 
 ---
 
-## 4. Backend
+### Backend
 
-### 4.1 Verantwortlichkeiten
+#### Verantwortlichkeiten
 
 Das Backend hat folgende Funktionen:
 
@@ -420,14 +418,14 @@ Das Backend hat folgende Funktionen:
   - Azure OpenAI
   - Anthropic (Claude)
 
-### 4.2 Nutzungsszenarien
+#### Nutzungsszenarien
 
 Das Backend kommt zum Einsatz, wenn der User via Frontend:
 - Ein neues Preset erstellt oder löscht
 - Ein bestehendes Preset ausführen möchte
 - Neue API-Credentials speichern oder löschen möchte
 
-### 4.3 Datenfluss bei Preset-Ausführung
+#### Datenfluss bei Preset-Ausführung
 
 1. **Frontend → Backend**: Übergabe der notwendigen Daten
    - Preset-Name
@@ -440,9 +438,9 @@ Das Backend kommt zum Einsatz, wenn der User via Frontend:
 3. **Backend → Frontend**: Rückgabe des Ergebnisses
    - Frontend fügt Ergebnis in die Zwischenablage ein
 
-### 4.4 Datenstrukturen
+#### Datenstrukturen
 
-#### Preset-Struktur (presets.json):
+##### Preset-Struktur (presets.json):
 ```json
 {
   "presets": [
@@ -463,7 +461,7 @@ Das Backend kommt zum Einsatz, wenn der User via Frontend:
 }
 ```
 
-#### Config-Struktur (config.json):
+##### Config-Struktur (config.json):
 ```json
 {
   "credentials": {
@@ -495,9 +493,9 @@ Das Backend kommt zum Einsatz, wenn der User via Frontend:
 
 ---
 
-## 5. API-Schnittstellen
+### API-Schnittstellen
 
-### 5.1 Backend-Endpoints
+#### Backend-Endpoints
 
 Das Backend stellt folgende Endpoints bereit (JSON-basiert):
 
@@ -513,7 +511,7 @@ Das Backend stellt folgende Endpoints bereit (JSON-basiert):
 | `delete_credentials` | Entfernen von API-Credentials | Provider-Name | Success/Error |
 | `list_credentials` | Auflisten aller gespeicherten Credentials | - | Provider-Liste (ohne Keys) |
 
-### 5.2 Datenformat
+#### Datenformat
 
 Alle Kommunikation zwischen Frontend und Backend erfolgt im **JSON-Format**.
 
@@ -542,9 +540,9 @@ Alle Kommunikation zwischen Frontend und Backend erfolgt im **JSON-Format**.
 
 ---
 
-## 6. Sicherheitskonzept für API-Credentials
+### Sicherheitskonzept für API-Credentials
 
-### 6.1 Speicherort und Sicherheitsphilosophie
+#### Speicherort und Sicherheitsphilosophie
 
 Da **PromptPilot** eine lokale Desktop-Anwendung ist, die ausschließlich auf dem Rechner des jeweiligen Users läuft, wird folgende Sicherheitsstrategie angewendet:
 
@@ -554,7 +552,7 @@ Da **PromptPilot** eine lokale Desktop-Anwendung ist, die ausschließlich auf de
 - ✓ Keine Verschlüsselung der Credentials (da lokale Anwendung)
 - ✓ Dateisystem-Berechtigungen als Schutz
 
-### 6.2 Speicherort der Credentials
+#### Speicherort der Credentials
 
 **macOS:**
 ```
@@ -572,7 +570,7 @@ Da **PromptPilot** eine lokale Desktop-Anwendung ist, die ausschließlich auf de
 └── logs\
 ```
 
-### 6.3 Dateiberechtigungen
+#### Dateiberechtigungen
 
 Die Anwendung setzt beim ersten Start automatisch restriktive Dateiberechtigungen:
 
@@ -583,7 +581,7 @@ Die Anwendung setzt beim ersten Start automatisch restriktive Dateiberechtigunge
 **Windows:**
 - Entsprechende NTFS-Berechtigungen nur für den aktuellen User
 
-### 6.4 Credential-Format in config.json
+#### Credential-Format in config.json
 
 ```json
 {
@@ -606,7 +604,7 @@ Die Anwendung setzt beim ersten Start automatisch restriktive Dateiberechtigunge
 }
 ```
 
-### 6.5 Sicherheitshinweise für User
+#### Sicherheitshinweise für User
 
 In der GUI wird folgender Hinweis angezeigt:
 
@@ -628,7 +626,7 @@ Stellen Sie sicher, dass:
 Speicherort: ~/Library/Application Support/PromptPilot/config.json
 ```
 
-### 6.6 Begründung für nicht verschlüsselte Speicherung
+#### Begründung für nicht verschlüsselte Speicherung
 
 **Warum keine Verschlüsselung?**
 
@@ -646,9 +644,9 @@ Speicherort: ~/Library/Application Support/PromptPilot/config.json
 
 ---
 
-## 7. Deployment & Distribution
+### Deployment & Distribution
 
-### 7.1 Ziel
+#### Ziel
 
 Am Ende des Projekts soll das Tool:
 - In ein einzelnes Script gepackt werden
@@ -656,14 +654,14 @@ Am Ende des Projekts soll das Tool:
 - Für den Enduser so einfach wie möglich nutzbar sein
 - Ohne großen Aufwand für Installation von Abhängigkeiten funktionieren
 
-### 7.2 Plattformen
+#### Plattformen
 
 - **Hauptfokus**: macOS (da beide Entwickler Mac-User sind)
 - **Sekundär**: Windows (zukünftig mit PyInstaller)
 
-### 7.3 Packaging mit py2app (macOS)
+#### Packaging mit py2app (macOS)
 
-#### 7.3.1 Warum py2app?
+##### Warum py2app?
 
 **Vorteile:**
 - ✓ Speziell für macOS entwickelt
@@ -672,7 +670,7 @@ Am Ende des Projekts soll das Tool:
 - ✓ Unterstützt Code-Signing und Notarisierung für Distribution
 - ✓ Exzellente Kompatibilität mit PySide6/Qt
 
-#### 7.3.2 Setup-Konfiguration
+##### Setup-Konfiguration
 
 **setup.py für py2app:**
 
@@ -712,7 +710,7 @@ setup(
 )
 ```
 
-#### 7.3.3 Build-Prozess
+##### Build-Prozess
 
 **Entwicklungsmodus (zum Testen):**
 ```bash
@@ -749,7 +747,7 @@ dist/
         └── Info.plist
 ```
 
-#### 7.3.4 App-Bundle-Struktur
+##### App-Bundle-Struktur
 
 ```
 PromptPilot.app/
@@ -777,7 +775,7 @@ PromptPilot.app/
 │       └── ...
 ```
 
-#### 7.3.5 Code-Signing & Notarisierung (Optional für Distribution)
+##### Code-Signing & Notarisierung (Optional für Distribution)
 
 **Für öffentliche Distribution:**
 
@@ -808,7 +806,7 @@ PromptPilot.app/
 - User müssen App über Systemeinstellungen freigeben (Gatekeeper)
 - Oder: User hält beim ersten Start Command-Taste und öffnet per Rechtsklick
 
-#### 7.3.6 Abhängigkeiten
+##### Abhängigkeiten
 
 **Python-Pakete (requirements.txt):**
 ```
@@ -826,7 +824,7 @@ pyperclip>=1.8.2       # für Clipboard-Operationen
 - 200 MB freier Speicherplatz
 - Internetverbindung (für API-Calls)
 
-#### 7.3.7 Distribution
+##### Distribution
 
 **Methode 1: DMG-Image (empfohlen)**
 - User lädt DMG-Datei herunter
@@ -844,7 +842,7 @@ pyperclip>=1.8.2       # für Clipboard-Operationen
 - User kann direkt von GitHub downloaden
 - Versions-Tracking automatisch
 
-#### 7.3.8 Erste Ausführung
+##### Erste Ausführung
 
 **User-Erfahrung beim ersten Start:**
 
@@ -857,7 +855,7 @@ pyperclip>=1.8.2       # für Clipboard-Operationen
 4. GUI öffnet sich mit Willkommens-Screen
 5. User wird aufgefordert, erste API-Credentials einzugeben
 
-#### 7.3.9 Update-Mechanismus (zukünftig)
+##### Update-Mechanismus (zukünftig)
 
 **Mögliche Ansätze:**
 - Sparkle Framework (Standard für macOS Apps)
@@ -866,7 +864,7 @@ pyperclip>=1.8.2       # für Clipboard-Operationen
 
 ---
 
-## 8. Offene Punkte für Proof of Concept
+### Offene Punkte für Proof of Concept
 
 Die folgenden Aspekte werden im Proof of Concept (PoC) implementiert und getestet:
 
@@ -878,9 +876,9 @@ Die folgenden Aspekte werden im Proof of Concept (PoC) implementiert und geteste
 
 ---
 
-## 9. Zusammenfassung & nächste Schritte
+### Zusammenfassung & nächste Schritte
 
-### 9.1 Projektzusammenfassung
+#### Projektzusammenfassung
 
 **PromptPilot** ist ein Desktop-Tool für macOS (und zukünftig Windows), das die repetitive Nutzung von LLMs automatisiert durch:
 - Vordefinierte Presets mit Custom Prompts
@@ -893,7 +891,7 @@ Die folgenden Aspekte werden im Proof of Concept (PoC) implementiert und geteste
 - OpenAI, Anthropic, Azure OpenAI APIs
 - py2app für macOS Distribution
 
-### 9.2 Entwicklungsreihenfolge
+#### Entwicklungsreihenfolge
 
 **Phase 1: Backend-Grundlage**
 1. Preset-Verwaltung (JSON CRUD)
@@ -916,7 +914,7 @@ Die folgenden Aspekte werden im Proof of Concept (PoC) implementiert und geteste
 12. DMG-Erstellung
 13. Dokumentation für User
 
-### 9.3 Erfolgsmetriken
+#### Erfolgsmetriken
 
 Das Projekt ist erfolgreich, wenn:
 - ✓ User ein Preset in < 2 Minuten erstellen kann
@@ -924,4 +922,3 @@ Das Projekt ist erfolgreich, wenn:
 - ✓ Installation durch einfaches Drag & Drop möglich ist
 - ✓ App stabil im Hintergrund läuft ohne Abstürze
 - ✓ Mind. 3 LLM-Provider unterstützt werden
-
