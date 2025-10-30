@@ -151,6 +151,30 @@ class APIBackend:
             return self._save_credentials()
         return False
 
+    def save_credentials(self, api_key: str = None, api_url: str = None, **kwargs) -> bool:
+        """
+        Speichert Credentials - Kompatibilität mit Frontend
+
+        Args:
+            api_key: Der API-Key
+            api_url: Die API-URL (optional)
+            **kwargs: Weitere Credentials (z.B. endpoint, org_id, etc.)
+
+        Returns:
+            True wenn erfolgreich gespeichert
+        """
+        if api_key:
+            self.credentials["api_key"] = api_key
+        if api_url:
+            self.credentials["api_url"] = api_url
+
+        # Speichere alle zusätzlichen Parameter
+        for key, value in kwargs.items():
+            if value:  # Nur speichern wenn nicht leer
+                self.credentials[key] = value
+
+        return self._save_credentials()
+
     # ========================================================================
     # TEIL 3: PRESET-VERWALTUNG
     # ========================================================================
