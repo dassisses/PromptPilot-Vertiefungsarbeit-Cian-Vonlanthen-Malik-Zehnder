@@ -336,7 +336,6 @@ class APIManager(QMainWindow):
                 border-radius: 6px;
                 padding: 10px 20px;
                 font-weight: 500;
-                cursor: pointer;
             }
             
             QPushButton:hover {
