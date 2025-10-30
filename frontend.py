@@ -15,7 +15,7 @@ class APIManager(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("PromptPilot")
-        self.setMinimumSize(1400, 900)
+        self.setMinimumSize(800, 600)
 
         # Erzwinge Dark Mode - unabhängig von Systemeinstellungen
         self.force_dark_mode()
