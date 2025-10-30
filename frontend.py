@@ -205,7 +205,7 @@ class APIManager(QMainWindow):
     def apply_stylesheets(self):
         self.setStyleSheet("""
             QWidget {
-                font-family: 'Segoe UI', Arial, sans-serif;
+                font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
                 font-size: 13px;
                 background-color: #121212;
                 color: #e0e0e0;
