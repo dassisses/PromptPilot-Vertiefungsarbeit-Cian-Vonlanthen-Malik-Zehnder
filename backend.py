@@ -473,3 +473,12 @@ class APIBackend:
             return {"valid": False, "error": "Unbekannter API-Typ"}
 
         return {"valid": result.get("success", False), "error": result.get("error")}
+
+    @property
+    def api_credentials(self) -> Dict:
+        """
+        Property für Kompatibilität mit Frontend.
+        Gibt alle gespeicherten API-Credentials zurück.
+        """
+        return self.credentials
+
