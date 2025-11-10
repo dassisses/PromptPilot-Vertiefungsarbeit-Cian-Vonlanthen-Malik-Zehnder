@@ -1,508 +1,270 @@
-import requests
 import json
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List
+import openai
 
 
-class APIBackend:
-    """
-    Backend für PromptPilot
-
-    Diese Klasse verwaltet:
-    - API-Credentials (OpenAI, Azure, Anthropic)
-    - Presets (gespeicherte Prompt-Konfigurationen)
-    - API-Anfragen an verschiedene LLM-Anbieter
-    """
-
+class PromptPilotBackend:
     def __init__(self):
-        """
-        Initialisierung des Backends
+        self.preset_file = "presets.json"
+        self.credentials_file = "credentials.json"
+        self._init_files()
+        self.client = None
 
-        Lädt beim Start:
-        - API-Credentials aus config.json
-        - Presets aus presets.json
-        """
-        self.config_file = "config.json"
-        self.presets_file = "presets.json"
-
-        # Lade gespeicherte Daten
-        self.credentials = self._load_credentials()
-        self.presets = self._load_presets()
-
-    # ========================================================================
-    # TEIL 1: DATEI-VERWALTUNG (Laden & Speichern)
-    # ========================================================================
-
-    def _load_credentials(self) -> Dict:
-        """
-        Lädt API-Credentials aus config.json
-
-        Returns:
-            Dictionary mit API-Keys für verschiedene Anbieter
-            Beispiel: {"openai_key": "sk-...", "anthropic_key": "..."}
-        """
-        if os.path.exists(self.config_file):
-            try:
-                with open(self.config_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except Exception as e:
-                print(f"Fehler beim Laden der Credentials: {e}")
-                return {}
-        return {}
-
-    def _save_credentials(self) -> bool:
-        """
-        Speichert API-Credentials in config.json
-
-        Returns:
-            True wenn erfolgreich, False bei Fehler
-        """
-        try:
-            with open(self.config_file, 'w', encoding='utf-8') as f:
-                json.dump(self.credentials, f, indent=2, ensure_ascii=False)
-            return True
-        except Exception as e:
-            print(f"Fehler beim Speichern der Credentials: {e}")
-            return False
-
-    def _load_presets(self) -> List[Dict]:
-        """
-        Lädt Presets aus presets.json
-
-        Returns:
-            Liste von Preset-Dictionaries
-            Beispiel: [{"name": "Rechtschreibung", "prompt": "...", "api_type": "openai"}]
-        """
-        if os.path.exists(self.presets_file):
-            try:
-                with open(self.presets_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except Exception as e:
-                print(f"Fehler beim Laden der Presets: {e}")
-                return []
-        return []
-
-    def _save_presets(self) -> bool:
-        """
-        Speichert Presets in presets.json
-
-        Returns:
-            True wenn erfolgreich, False bei Fehler
-        """
-        try:
-            with open(self.presets_file, 'w', encoding='utf-8') as f:
-                json.dump(self.presets, f, indent=2, ensure_ascii=False)
-            return True
-        except Exception as e:
-            print(f"Fehler beim Speichern der Presets: {e}")
-            return False
-
-    # ========================================================================
-    # TEIL 2: CREDENTIALS-VERWALTUNG
-    # ========================================================================
-
-    def set_credential(self, key: str, value: str) -> bool:
-        """
-        Speichert einen API-Key
-
-        Args:
-            key: Name des Keys (z.B. "openai_key", "anthropic_key")
-            value: Der API-Key
-
-        Returns:
-            True wenn erfolgreich gespeichert
-        """
-        self.credentials[key] = value
-        return self._save_credentials()
-
-    def get_credential(self, key: str) -> Optional[str]:
-        """
-        Holt einen gespeicherten API-Key
-
-        Args:
-            key: Name des Keys
-
-        Returns:
-            Der API-Key oder None wenn nicht vorhanden
-        """
-        return self.credentials.get(key)
-
-    def get_all_credentials(self) -> Dict:
-        """
-        Gibt alle Credentials zurück
-
-        Returns:
-            Dictionary mit allen API-Keys
-        """
-        return self.credentials.copy()
-
-    def delete_credential(self, key: str) -> bool:
-        """
-        Löscht einen API-Key
-
-        Args:
-            key: Name des zu löschenden Keys
-
-        Returns:
-            True wenn erfolgreich gelöscht
-        """
-        if key in self.credentials:
-            del self.credentials[key]
-            return self._save_credentials()
-        return False
-
-    def save_credentials(self, api_key: str = None, api_url: str = None, **kwargs) -> bool:
-        """
-        Speichert Credentials - Kompatibilität mit Frontend
-
-        Args:
-            api_key: Der API-Key
-            api_url: Die API-URL (optional)
-            **kwargs: Weitere Credentials (z.B. endpoint, org_id, etc.)
-
-        Returns:
-            True wenn erfolgreich gespeichert
-        """
-        if api_key:
-            self.credentials["api_key"] = api_key
-        if api_url:
-            self.credentials["api_url"] = api_url
-
-        # Speichere alle zusätzlichen Parameter
-        for key, value in kwargs.items():
-            if value:  # Nur speichern wenn nicht leer
-                self.credentials[key] = value
-
-        return self._save_credentials()
-
-    # ========================================================================
-    # TEIL 3: PRESET-VERWALTUNG
-    # ========================================================================
-
-    def add_preset(self, name: str, prompt: str, api_type: str,
-                   model: str = "gpt-4", temperature: float = 0.7) -> bool:
-        """
-        Fügt ein neues Preset hinzu
-
-        Args:
-            name: Name des Presets (z.B. "Rechtschreibung korrigieren")
-            prompt: Der System-Prompt
-            api_type: API-Anbieter ("openai", "azure", "anthropic")
-            model: Modellname (Standard: "gpt-4")
-            temperature: Kreativität 0.0-1.0 (Standard: 0.7)
-
-        Returns:
-            True wenn erfolgreich hinzugefügt
-        """
-        preset = {
-            "name": name,
-            "prompt": prompt,
-            "api_type": api_type,
-            "model": model,
-            "temperature": temperature
-        }
-
-        self.presets.append(preset)
-        return self._save_presets()
-
-    def get_all_presets(self) -> List[Dict]:
-        """
-        Gibt alle Presets zurück
-
-        Returns:
-            Liste aller Preset-Dictionaries
-        """
-        return self.presets.copy()
-
-    def get_preset_by_name(self, name: str) -> Optional[Dict]:
-        """
-        Sucht ein Preset nach Namen
-
-        Args:
-            name: Name des Presets
-
-        Returns:
-            Preset-Dictionary oder None wenn nicht gefunden
-        """
-        for preset in self.presets:
-            if preset.get("name") == name:
-                return preset.copy()
-        return None
-
-    def update_preset(self, old_name: str, name: str, prompt: str,
-                     api_type: str, model: str = "gpt-4",
-                     temperature: float = 0.7) -> bool:
-        """
-        Aktualisiert ein bestehendes Preset
-
-        Args:
-            old_name: Aktueller Name des Presets
-            name: Neuer Name
-            prompt: Neuer Prompt
-            api_type: Neuer API-Typ
-            model: Neues Modell
-            temperature: Neue Temperature
-
-        Returns:
-            True wenn erfolgreich aktualisiert
-        """
-        for i, preset in enumerate(self.presets):
-            if preset.get("name") == old_name:
-                self.presets[i] = {
-                    "name": name,
-                    "prompt": prompt,
-                    "api_type": api_type,
-                    "model": model,
-                    "temperature": temperature
+    def _init_files(self):
+        # Initialize presets.json if not exists
+        if not os.path.exists(self.preset_file):
+            default_presets = [
+                {
+                    "name": "Translation to Spanish",
+                    "prompt": "Uebersetze mir folgenden text auf spanisch: ",
+                    "api_type": "chatgpt"
                 }
-                return self._save_presets()
-        return False
+            ]
+            with open(self.preset_file, 'w') as f:
+                json.dump(default_presets, f, indent=2)
 
-    def delete_preset(self, name: str) -> bool:
-        """
-        Löscht ein Preset
+        # Initialize credentials.json if not exists
+        if not os.path.exists(self.credentials_file):
+            with open(self.credentials_file, 'w') as f:
+                json.dump([], f, indent=2)
 
-        Args:
-            name: Name des zu löschenden Presets
-
-        Returns:
-            True wenn erfolgreich gelöscht
-        """
-        for i, preset in enumerate(self.presets):
-            if preset.get("name") == name:
-                self.presets.pop(i)
-                return self._save_presets()
-        return False
-
-    # ========================================================================
-    # TEIL 4: API-KOMMUNIKATION
-    # ========================================================================
-
-    def send_prompt(self, user_text: str, preset_name: str) -> Dict:
-        """
-        Sendet einen Prompt an die API
-
-        Args:
-            user_text: Der Text vom User (z.B. markierter Text)
-            preset_name: Name des zu verwendenden Presets
-
-        Returns:
-            Dictionary mit "success" und "response" oder "error"
-            Beispiel: {"success": True, "response": "Korrigierter Text..."}
-        """
-        # Hole das Preset
-        preset = self.get_preset_by_name(preset_name)
-        if not preset:
-            return {"success": False, "error": "Preset nicht gefunden"}
-
-        # Wähle die richtige API basierend auf api_type
-        api_type = preset.get("api_type", "openai")
-
-        if api_type == "openai":
-            return self._send_to_openai(user_text, preset)
-        elif api_type == "azure":
-            return self._send_to_azure(user_text, preset)
-        elif api_type == "anthropic":
-            return self._send_to_anthropic(user_text, preset)
-        else:
-            return {"success": False, "error": f"Unbekannter API-Typ: {api_type}"}
-
-    def _send_to_openai(self, user_text: str, preset: Dict) -> Dict:
-        """
-        Sendet Request an OpenAI API
-
-        Args:
-            user_text: User-Text
-            preset: Preset-Konfiguration
-
-        Returns:
-            Response-Dictionary
-        """
-        api_key = self.get_credential("openai_key")
-        if not api_key:
-            return {"success": False, "error": "OpenAI API-Key nicht konfiguriert"}
-
-        url = "https://api.openai.com/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-
-        # Baue die Nachricht zusammen
-        system_prompt = preset.get("prompt", "")
-        full_prompt = f"{system_prompt}\n\n{user_text}"
-
-        data = {
-            "model": preset.get("model", "gpt-4"),
-            "messages": [
-                {"role": "user", "content": full_prompt}
-            ],
-            "temperature": preset.get("temperature", 0.7)
-        }
-
+    def _init_client(self, api_type: str) -> bool:
         try:
-            response = requests.post(url, headers=headers, json=data, timeout=30)
-            response.raise_for_status()
+            with open(self.credentials_file, 'r') as f:
+                credentials = json.load(f)
 
-            result = response.json()
-            ai_response = result["choices"][0]["message"]["content"]
+            if api_type.lower() in ["chatgpt", "gpt-4", "gpt-3.5-turbo"]:
+                credential = next((c for c in credentials if c["name"] == "OpenAI"), None)
+                if credential:
+                    self.client = openai.OpenAI(api_key=credential["api_key"])
+                    return True
+            return False
+        except Exception:
+            return False
 
-            return {"success": True, "response": ai_response}
-
-        except requests.exceptions.RequestException as e:
-            return {"success": False, "error": f"API-Fehler: {str(e)}"}
-        except (KeyError, IndexError) as e:
-            return {"success": False, "error": f"Antwort-Format-Fehler: {str(e)}"}
-
-    def _send_to_azure(self, user_text: str, preset: Dict) -> Dict:
-        """
-        Sendet Request an Azure OpenAI API
-
-        Args:
-            user_text: User-Text
-            preset: Preset-Konfiguration
-
-        Returns:
-            Response-Dictionary
-        """
-        api_key = self.get_credential("azure_key")
-        endpoint = self.get_credential("azure_endpoint")
-
-        if not api_key or not endpoint:
-            return {"success": False, "error": "Azure API-Key oder Endpoint nicht konfiguriert"}
-
-        # Azure verwendet einen anderen URL-Aufbau
-        url = f"{endpoint}/openai/deployments/{preset.get('model', 'gpt-4')}/chat/completions?api-version=2023-05-15"
-
-        headers = {
-            "api-key": api_key,
-            "Content-Type": "application/json"
-        }
-
-        system_prompt = preset.get("prompt", "")
-        full_prompt = f"{system_prompt}\n\n{user_text}"
-
-        data = {
-            "messages": [
-                {"role": "user", "content": full_prompt}
-            ],
-            "temperature": preset.get("temperature", 0.7)
-        }
-
+    @property
+    def presets(self) -> List[Dict]:
+        """Gibt alle Presets zurück"""
         try:
-            response = requests.post(url, headers=headers, json=data, timeout=30)
-            response.raise_for_status()
+            with open(self.preset_file, 'r') as f:
+                return json.load(f)
+        except Exception:
+            return []
 
-            result = response.json()
-            ai_response = result["choices"][0]["message"]["content"]
-
-            return {"success": True, "response": ai_response}
-
-        except requests.exceptions.RequestException as e:
-            return {"success": False, "error": f"Azure API-Fehler: {str(e)}"}
-        except (KeyError, IndexError) as e:
-            return {"success": False, "error": f"Antwort-Format-Fehler: {str(e)}"}
-
-    def _send_to_anthropic(self, user_text: str, preset: Dict) -> Dict:
-        """
-        Sendet Request an Anthropic (Claude) API
-
-        Args:
-            user_text: User-Text
-            preset: Preset-Konfiguration
-
-        Returns:
-            Response-Dictionary
-        """
-        api_key = self.get_credential("anthropic_key")
-        if not api_key:
-            return {"success": False, "error": "Anthropic API-Key nicht konfiguriert"}
-
-        url = "https://api.anthropic.com/v1/messages"
-        headers = {
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "Content-Type": "application/json"
-        }
-
-        system_prompt = preset.get("prompt", "")
-
-        data = {
-            "model": preset.get("model", "claude-3-opus-20240229"),
-            "max_tokens": 4096,
-            "system": system_prompt,
-            "messages": [
-                {"role": "user", "content": user_text}
-            ],
-            "temperature": preset.get("temperature", 0.7)
-        }
-
+    def save_presets(self) -> bool:
+        """Speichert die Presets-Liste in die JSON-Datei"""
         try:
-            response = requests.post(url, headers=headers, json=data, timeout=30)
-            response.raise_for_status()
+            with open(self.preset_file, 'w') as f:
+                json.dump(self.presets, f, indent=2)
+            return True
+        except Exception:
+            return False
 
-            result = response.json()
-            ai_response = result["content"][0]["text"]
+    def save_preset(self, name: str, prompt: str, api_type: str) -> bool:
+        """Speichert ein neues Preset"""
+        try:
+            presets = self.presets
+            # Prüfe ob Preset bereits existiert
+            if any(p["name"] == name for p in presets):
+                return False
 
-            return {"success": True, "response": ai_response}
+            presets.append({"name": name, "prompt": prompt, "api_type": api_type})
 
-        except requests.exceptions.RequestException as e:
-            return {"success": False, "error": f"Anthropic API-Fehler: {str(e)}"}
-        except (KeyError, IndexError) as e:
-            return {"success": False, "error": f"Antwort-Format-Fehler: {str(e)}"}
+            with open(self.preset_file, 'w') as f:
+                json.dump(presets, f, indent=2)
+            return True
+        except Exception:
+            return False
 
-    # ========================================================================
-    # TEIL 5: HILFSFUNKTIONEN
-    # ========================================================================
+    def delete_preset_by_index(self, index: int) -> bool:
+        """Löscht ein Preset anhand des Index"""
+        try:
+            presets = self.presets
+            if 0 <= index < len(presets):
+                presets.pop(index)
+                with open(self.preset_file, 'w') as f:
+                    json.dump(presets, f, indent=2)
+                return True
+            return False
+        except Exception:
+            return False
 
-    def test_preset(self, preset_name: str) -> Dict:
-        """
-        Testet ein Preset mit einem Dummy-Text
+    def update_preset_by_index(self, index: int, name: str, prompt: str, api_type: str) -> bool:
+        """Aktualisiert ein Preset anhand des Index"""
+        try:
+            presets = self.presets
+            if 0 <= index < len(presets):
+                presets[index] = {"name": name, "prompt": prompt, "api_type": api_type}
+                with open(self.preset_file, 'w') as f:
+                    json.dump(presets, f, indent=2)
+                return True
+            return False
+        except Exception:
+            return False
 
-        Args:
-            preset_name: Name des zu testenden Presets
+    def manage_preset(self, action: str, name: str, prompt: str = None, api_type: str = None) -> Dict[str, str]:
+        try:
+            with open(self.preset_file, 'r') as f:
+                presets = json.load(f)
 
-        Returns:
-            Response-Dictionary
-        """
-        test_text = "Dies ist ein Test-Text zum Testen des Presets."
-        return self.send_prompt(test_text, preset_name)
+            if action == "post":
+                if any(p["name"] == name for p in presets):
+                    return {"status": "fail", "message": f"Preset '{name}' already exists"}
+                presets.append({"name": name, "prompt": prompt, "api_type": api_type})
 
-    def validate_api_key(self, api_type: str) -> Dict:
-        """
-        Validiert ob ein API-Key funktioniert
+            elif action == "delete":
+                presets = [p for p in presets if p["name"] != name]
 
-        Args:
-            api_type: Typ der API ("openai", "azure", "anthropic")
+            elif action == "update":
+                for preset in presets:
+                    if preset["name"] == name:
+                        preset["prompt"] = prompt
+                        preset["api_type"] = api_type
+                        break
+                else:
+                    return {"status": "fail", "message": f"Preset '{name}' not found"}
 
-        Returns:
-            Dictionary mit "valid" (True/False) und optional "error"
-        """
-        # Erstelle ein Test-Preset
-        test_preset = {
-            "name": "_test",
-            "prompt": "Sage nur 'OK'",
-            "api_type": api_type,
-            "model": "gpt-4" if api_type in ["openai", "azure"] else "claude-3-opus-20240229",
-            "temperature": 0.7
-        }
+            with open(self.preset_file, 'w') as f:
+                json.dump(presets, f, indent=2)
 
-        if api_type == "openai":
-            result = self._send_to_openai("Test", test_preset)
-        elif api_type == "azure":
-            result = self._send_to_azure("Test", test_preset)
-        elif api_type == "anthropic":
-            result = self._send_to_anthropic("Test", test_preset)
-        else:
-            return {"valid": False, "error": "Unbekannter API-Typ"}
+            return {"status": "success", "message": f"Preset {action} successful"}
 
-        return {"valid": result.get("success", False), "error": result.get("error")}
+        except Exception as e:
+            return {"status": "fail", "message": str(e)}
+
+    def manage_credential(self, action: str, name: str, api_key: str = None) -> Dict[str, str]:
+        try:
+            with open(self.credentials_file, 'r') as f:
+                credentials = json.load(f)
+
+            if action == "post":
+                if any(c["name"] == name for c in credentials):
+                    return {"status": "fail", "message": f"Credential '{name}' already exists"}
+                credentials.append({"name": name, "api_key": api_key})
+
+            elif action == "delete":
+                credentials = [c for c in credentials if c["name"] != name]
+
+            elif action == "update":
+                for cred in credentials:
+                    if cred["name"] == name:
+                        cred["api_key"] = api_key
+                        break
+                else:
+                    return {"status": "fail", "message": f"Credential '{name}' not found"}
+
+            with open(self.credentials_file, 'w') as f:
+                json.dump(credentials, f, indent=2)
+
+            return {"status": "success", "message": f"Credential {action} successful"}
+
+        except Exception as e:
+            return {"status": "fail", "message": str(e)}
+
+    def save_credentials(self, api_key: str, provider: str = "OpenAI") -> bool:
+        """Speichert API Credentials - kompatibel mit Frontend"""
+        result = self.manage_credential("post", provider, api_key)
+        if result["status"] == "fail" and "already exists" in result["message"]:
+            # Update statt post wenn schon vorhanden
+            result = self.manage_credential("update", provider, api_key)
+        return result["status"] == "success"
+
+    def get_credentials(self) -> List[Dict]:
+        """Gibt alle Credentials zurück"""
+        try:
+            with open(self.credentials_file, 'r') as f:
+                return json.load(f)
+        except Exception:
+            return []
 
     @property
     def api_credentials(self) -> Dict:
-        """
-        Property für Kompatibilität mit Frontend.
-        Gibt alle gespeicherten API-Credentials zurück.
-        """
-        return self.credentials
+        """Gibt Credentials als Dictionary zurück - für Frontend-Kompatibilität"""
+        creds = self.get_credentials()
+        result = {}
+        for cred in creds:
+            result[cred["name"]] = cred["api_key"]
+        return result
 
+    def execute_preset(self, preset_name: str, user_input: str) -> Dict[str, str]:
+        try:
+            # Load presets
+            with open(self.preset_file, 'r') as f:
+                presets = json.load(f)
+
+            # Find the requested preset
+            preset = next((p for p in presets if p["name"] == preset_name), None)
+            if not preset:
+                return {"status": "fail", "message": f"Preset '{preset_name}' not found"}
+
+            # Initialize the appropriate client
+            if not self._init_client(preset["api_type"]):
+                return {"status": "fail", "message": f"Could not initialize {preset['api_type']} client. Please check your credentials."}
+
+            # Execute the API call based on the type
+            full_prompt = f"{preset['prompt']}{user_input}"
+
+            if preset["api_type"].lower() in ["chatgpt", "gpt-4", "gpt-3.5-turbo"]:
+                try:
+                    response = self.client.chat.completions.create(
+                        model="gpt-3.5-turbo",
+                        messages=[
+                            {"role": "user", "content": full_prompt}
+                        ]
+                    )
+                    return {
+                        "status": "success",
+                        "message": "API call successful",
+                        "response": response.choices[0].message.content
+                    }
+                except Exception as e:
+                    return {"status": "fail", "message": f"API call failed: {str(e)}"}
+
+            return {"status": "fail", "message": f"Unsupported API type: {preset['api_type']}"}
+
+        except Exception as e:
+            return {"status": "fail", "message": str(e)}
+
+    def test_credential(self, credential_name: str) -> Dict[str, str]:
+        try:
+            with open(self.credentials_file, 'r') as f:
+                credentials = json.load(f)
+
+            credential = next((c for c in credentials if c["name"] == credential_name), None)
+            if not credential:
+                return {"status": "fail", "message": f"Credential '{credential_name}' not found"}
+
+            # Test the API key with a simple request
+            try:
+                client = openai.OpenAI(api_key=credential["api_key"])
+                response = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[{"role": "user", "content": "Hi"}],
+                    max_tokens=5
+                )
+                return {"status": "success", "message": "Credential test successful"}
+            except Exception as e:
+                return {"status": "fail", "message": f"API test failed: {str(e)}"}
+
+        except Exception as e:
+            return {"status": "fail", "message": str(e)}
+
+
+# Alias für Frontend-Kompatibilität
+APIBackend = PromptPilotBackend
+
+# Example usage:
+if __name__ == "__main__":
+    backend = PromptPilotBackend()
+
+    # Test preset management
+    print(backend.manage_preset("post", "Test Preset", "This is a test prompt", "chatgpt"))
+    print(backend.manage_preset("update", "Test Preset", "Updated test prompt", "chatgpt"))
+    print(backend.execute_preset("Test Preset", "Hello world"))
+    print(backend.manage_preset("delete", "Test Preset"))
+
+    # Test credential management
+    print(backend.manage_credential("post", "OpenAI", "sk-test123"))
+    print(backend.test_credential("OpenAI"))
+    print(backend.manage_credential("delete", "OpenAI"))

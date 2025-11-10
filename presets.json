@@ -1,1 +1,7 @@
-[{"name": "Translation to Spanish", "prompt": "Uebersetze mir folgenden text auf spanisch: ", "api_type": "chatgpt"}]
+[
+  {
+    "name": "\u00fcbersetzten auf en",
+    "prompt": "\u00fcbersetzte auf en",
+    "api_type": "GPT-4"
+  }
+]
