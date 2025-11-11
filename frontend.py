@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QLineEdit,
     QVBoxLayout, QHBoxLayout, QPushButton, QComboBox,
     QFrame, QScrollArea, QMessageBox, QStackedWidget,
-    QTextEdit, QDialog, QSplitter,
+    QTextEdit, QDialog, QSplitter, QKeySequenceEdit,
 
     QSystemTrayIcon, QMenu, QStyle
 )
@@ -28,61 +28,145 @@ MAX_PRESET_NAME_STORE = 60   # max length allowed for storing names
 EDIT_BUTTON_COLOR = "#7c3aed"  # violet-ish instead of yellow for the edit button
 
 
+MODIFIER_ORDER = ("Ctrl", "Meta", "Alt", "AltGr", "Shift")
+MODIFIER_SYNONYMS = {
+    "ctrl": "Ctrl",
+    "control": "Ctrl",
+    "shift": "Shift",
+    "alt": "Alt",
+    "option": "Alt",
+    "altgr": "AltGr",
+    "meta": "Meta",
+    "cmd": "Meta",
+    "command": "Meta",
+    "super": "Meta",
+}
+
+KEY_SYNONYMS = {
+    "return": "Enter",
+    "enter": "Enter",
+    "esc": "Escape",
+    "escape": "Escape",
+    "space": "Space",
+    "tab": "Tab",
+    "backspace": "Backspace",
+    "del": "Delete",
+    "delete": "Delete",
+    "plus": "+",
+    "minus": "-",
+    "asterisk": "*",
+    "slash": "/",
+    "period": ".",
+    "comma": ",",
+}
+
+
+def _lookup(mapping, key):
+    if key in mapping:
+        return mapping[key]
+    lower = key.lower()
+    return mapping.get(lower)
+
+
+def canonicalize_shortcut(shortcut_str: str, platform: str = None) -> str:
+    """Create a canonical representation of a shortcut that is stable across platforms."""
+    if platform is None:
+        platform = sys.platform
+
+    if not shortcut_str or not shortcut_str.strip():
+        raise ValueError("Shortcut darf nicht leer sein")
+
+    raw = shortcut_str.strip()
+    sequence = QKeySequence(raw)
+    if sequence.isEmpty():
+        raise ValueError("Shortcut konnte nicht interpretiert werden")
+
+    seq_str = sequence.toString(QKeySequence.SequenceFormat.PortableText)
+    if not seq_str:
+        raise ValueError("Shortcut konnte nicht interpretiert werden")
+
+    # Qt kann mehrere Sequenzen liefern (durch Komma getrennt). Wir verwenden nur die erste.
+    if "," in seq_str:
+        seq_str = seq_str.split(",", 1)[0].strip()
+
+    if "+" not in seq_str:
+        raise ValueError("Shortcut benötigt mindestens einen Modifier (z.B. Ctrl+T)")
+
+    mods_part, key_part = seq_str.rsplit("+", 1)
+    modifiers_raw = [m.strip() for m in mods_part.split("+") if m.strip()]
+    key_raw = key_part.strip()
+
+    if not modifiers_raw:
+        raise ValueError("Shortcut benötigt mindestens einen Modifier (z.B. Ctrl+T)")
+    if not key_raw:
+        raise ValueError("Shortcut-Taste konnte nicht erkannt werden")
+
+    modifiers = []
+    seen_mods = set()
+    for mod in modifiers_raw:
+        canonical = _lookup(MODIFIER_SYNONYMS, mod)
+        if not canonical:
+            raise ValueError(f"Ungültiger Modifier: '{mod}'")
+        if canonical not in seen_mods:
+            seen_mods.add(canonical)
+            modifiers.append(canonical)
+
+    # Sortiere Modifier für eine stabile Darstellung
+    modifiers.sort(key=lambda m: MODIFIER_ORDER.index(m) if m in MODIFIER_ORDER else len(MODIFIER_ORDER))
+
+    key_lookup = _lookup(KEY_SYNONYMS, key_raw) or key_raw
+    if len(key_lookup) == 1:
+        key_lookup = key_lookup.upper()
+
+    canonical = "+".join(modifiers + [key_lookup])
+
+    # Plattform-spezifische Feinheiten (z.B. Cmd auf macOS als Meta belassen)
+    if platform == "darwin":
+        canonical = canonical.replace("Cmd+", "Meta+")
+
+    return canonical
+
+
+def format_shortcut_for_display(shortcut_str: str, platform: str = None) -> str:
+    """Returns a user-facing representation of the shortcut (with platform glyphs where appropriate)."""
+    if not shortcut_str:
+        return ""
+
+    if platform is None:
+        platform = sys.platform
+
+    if "+" not in shortcut_str:
+        return shortcut_str
+
+    mods_part, key_part = shortcut_str.rsplit("+", 1)
+    modifiers = [p.strip() for p in mods_part.split("+") if p.strip()]
+    key = key_part.strip() or "+"
+    key_display = _lookup(KEY_SYNONYMS, key) or key
+    if len(key_display) == 1:
+        key_display = key_display.upper()
+
+    display_map = {
+        "Ctrl": "Ctrl",
+        "Alt": "Alt" if platform != "darwin" else "⌥",
+        "Shift": "Shift" if platform != "darwin" else "⇧",
+        "AltGr": "AltGr",
+        "Meta": "⌘" if platform == "darwin" else "Meta",
+    }
+
+    display_mods = [display_map.get(mod, mod) for mod in modifiers]
+    return " + ".join(display_mods + [key_display])
+
+
 def is_valid_shortcut(shortcut_str: str, platform: str = None) -> tuple:
     """
     Validiert einen Shortcut-String.
     Returniert (is_valid, error_message)
     """
-    if platform is None:
-        platform = sys.platform
-
-    if not shortcut_str or not shortcut_str.strip():
-        return False, "Shortcut darf nicht leer sein"
-
-    shortcut_str = shortcut_str.strip()
-
-    # Erlaubte Modifier und Keys
-    # Entferne 'Cmd' als erlaubte Eingabe (problematisch auf manchen Systemen)
-    valid_modifiers = {"Ctrl", "Control", "Shift", "Alt", "Option", "Meta", "AltGr"}
-    valid_keys = {
-        # Function keys
-        "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
-        # Letter keys
-        *[chr(i) for i in range(ord('A'), ord('Z') + 1)],
-        *[str(i) for i in range(10)],
-        # Special keys
-        "Return", "Enter", "Space", "Tab", "Backspace", "Delete", "Escape",
-        "Home", "End", "PageUp", "PageDown", "Left", "Right", "Up", "Down",
-        "Insert", "Pause", "Print", "ScrollLock", "CapsLock", "NumLock",
-        "+", "-", "*", "/", "=", "[", "]", "{", "}", ";", ":", "'", '"',
-        ",", ".", "<", ">", "?", "/", "\\", "|", "`", "~", "!", "@", "#",
-        "$", "%", "^", "&"
-    }
-
-    # Parse shortcut
-    parts = shortcut_str.split("+")
-    if len(parts) < 2:
-        return False, "Shortcut benötigt mindestens einen Modifier (z.B. Ctrl+T, Control+Alt+P)"
-
-    modifiers = [m.strip() for m in parts[:-1]]
-    key = parts[-1].strip()
-
-    # Validiere Modifiers
-    for mod in modifiers:
-        if mod not in valid_modifiers:
-            allowed = ", ".join(sorted(valid_modifiers))
-            return False, f"Ungültiger Modifier: '{mod}'. Erlaubt: {allowed}"
-
-    # Validiere Key
-    if key not in valid_keys:
-        return False, f"Ungültiger Key: '{key}'"
-
-    # Grundlegende Plausibilitätschecks (plattformunabhängig, redundanz-safe)
-    if len(modifiers) == 1 and modifiers[0] in {"Alt", "Option"}:
-        # Option/Alt alleine ist oft nicht ideal — nur als Warnung (aber wir lassen es zu)
+    try:
+        canonicalize_shortcut(shortcut_str, platform)
         return True, ""
-
-    return True, ""
+    except ValueError as exc:
+        return False, str(exc)
 
 
 def normalize_shortcut_for_platform(shortcut_str: str, platform: str = None) -> str:
@@ -90,23 +174,10 @@ def normalize_shortcut_for_platform(shortcut_str: str, platform: str = None) -> 
     Normalisiert einen Shortcut-String (benutzerfreundliche Synonyme) für Speicherung.
     Ersetzt z.B. 'Control' -> 'Ctrl', 'Option' -> 'Alt' usw.
     """
-    if platform is None:
-        platform = sys.platform
-
-    s = shortcut_str.strip()
-
-    # Vereinheitliche Synonyme
-    s = s.replace('Control', 'Ctrl')
-    s = s.replace('Option', 'Alt')
-    s = s.replace('AltGr', 'AltGr')
-    # Falls jemand noch 'Cmd' schreibt, wandeln wir es intern zu 'Meta' (aber 'Cmd' wird nicht in valid_modifiers angeboten)
-    s = s.replace('Cmd', 'Meta')
-
-    if platform != 'darwin':
-        # Auf Windows/Linux: Meta (wenn vorhanden) ist in der Regel Ctrl
-        s = s.replace('Meta', 'Ctrl')
-
-    return s
+    try:
+        return canonicalize_shortcut(shortcut_str, platform)
+    except ValueError:
+        return shortcut_str.strip()
 
 
 def canonicalize_shortcut_for_qt(shortcut_str: str, platform: str = None) -> str:
@@ -116,35 +187,10 @@ def canonicalize_shortcut_for_qt(shortcut_str: str, platform: str = None) -> str
     - Auf macOS: lässt Meta als Meta (Qt erwartet 'Meta' für Command)
     - Auf Windows/Linux: wandelt Meta -> Ctrl
     """
-    if platform is None:
-        platform = sys.platform
-
-    parts = [p.strip() for p in shortcut_str.split('+') if p.strip()]
-    if not parts:
-        return shortcut_str
-
-    modifiers = parts[:-1]
-    key = parts[-1]
-
-    map_mod = {
-        'Control': 'Ctrl', 'Ctrl': 'Ctrl', 'Shift': 'Shift',
-        'Alt': 'Alt', 'Option': 'Alt', 'AltGr': 'AltGr',
-        'Meta': 'Meta', 'Cmd': 'Meta'
-    }
-
-    canonical_mods = []
-    for m in modifiers:
-        canonical_mods.append(map_mod.get(m, m))
-
-    # Plattform-spezifische Anpassungen
-    if platform == 'darwin':
-        # Auf macOS: Qt erwartet 'Meta' für Command und 'Alt' für Option. Wir belassen 'Meta' unverändert.
-        pass
-    else:
-        # Auf Windows/Linux: Meta -> Ctrl
-        canonical_mods = ['Ctrl' if m == 'Meta' else m for m in canonical_mods]
-
-    return "+".join(canonical_mods + [key])
+    try:
+        return canonicalize_shortcut(shortcut_str, platform)
+    except ValueError:
+        return shortcut_str.strip()
 
 
 # Platform-specific modifier key (Anzeige / Tooltip)
@@ -261,14 +307,16 @@ class ShortcutDialog(QDialog):
         desc.setObjectName("section_subtitle")
         layout.addWidget(desc)
 
-        self.shortcut_input = QLineEdit()
-        self.shortcut_input.setText(current_shortcut)
-        # Avoid suggesting 'Cmd' as user input — suggest platform-agnostic names
-        if sys.platform == "darwin":
-            self.shortcut_input.setPlaceholderText("z.B. Control+Shift+T oder Option+Shift+T")
-        else:
-            self.shortcut_input.setPlaceholderText("z.B. Ctrl+Shift+T")
-        layout.addWidget(self.shortcut_input)
+        self.shortcut_edit = QKeySequenceEdit()
+        self.shortcut_edit.setObjectName("shortcut_input")
+        self.shortcut_edit.setMaximumSequenceLength(1)
+        if current_shortcut:
+            try:
+                normalized = canonicalize_shortcut(current_shortcut)
+            except ValueError:
+                normalized = current_shortcut
+            self.shortcut_edit.setKeySequence(QKeySequence(normalized))
+        layout.addWidget(self.shortcut_edit)
 
         # Beispiele - plattformspezifisch
         if sys.platform == "darwin":
@@ -304,35 +352,33 @@ class ShortcutDialog(QDialog):
 
     def validate_and_accept(self):
         """Validiert den Shortcut vor dem Akzeptieren"""
-        shortcut = self.shortcut_input.text().strip()
-
-        if not shortcut:
+        sequence = self.shortcut_edit.keySequence()
+        if sequence.isEmpty():
             self.show_error("Shortcut darf nicht leer sein")
             return
 
-        # Validiere Shortcut
-        is_valid, error_msg = is_valid_shortcut(shortcut)
-
-        if not is_valid:
-            self.show_error(error_msg)
+        portable = sequence.toString(QKeySequence.SequenceFormat.PortableText)
+        try:
+            normalized = canonicalize_shortcut(portable)
+        except ValueError as exc:
+            self.show_error(str(exc))
             return
 
-        # Normalisiere für Plattform
-        normalized = normalize_shortcut_for_platform(shortcut)
-        self.shortcut_input.setText(normalized)
-
+        self._result_shortcut = normalized
+        self.error_label.hide()
+        self.shortcut_edit.setProperty("error", False)
         self.accept()
 
     def show_error(self, message):
         """Zeigt einen Fehler an"""
         self.error_label.setText(message)
         self.error_label.show()
-        self.shortcut_input.setProperty("error", True)
-        self.shortcut_input.style().unpolish(self.shortcut_input)
-        self.shortcut_input.style().polish(self.shortcut_input)
+        self.shortcut_edit.setProperty("error", True)
+        self.shortcut_edit.style().unpolish(self.shortcut_edit)
+        self.shortcut_edit.style().polish(self.shortcut_edit)
 
     def get_shortcut(self):
-        return self.shortcut_input.text().strip()
+        return getattr(self, "_result_shortcut", "")
 
 
 class ShortcutOverviewDialog(QDialog):
@@ -380,8 +426,8 @@ class ShortcutOverviewDialog(QDialog):
         system_title.setFont(QFont("SF Pro Display", 14, QFont.Weight.Bold))
         system_layout.addWidget(system_title)
 
-        system_layout.addWidget(self.create_shortcut_item("Ctrl+1", "Presets-Seite"))
-        system_layout.addWidget(self.create_shortcut_item("Ctrl+2", "API Einstellungen"))
+        system_layout.addWidget(self.create_shortcut_item(format_shortcut_for_display(f"{MODIFIER_KEY}+1"), "Presets-Seite"))
+        system_layout.addWidget(self.create_shortcut_item(format_shortcut_for_display(f"{MODIFIER_KEY}+2"), "API Einstellungen"))
         content_layout.addWidget(system_card)
 
         # Preset Shortcuts
@@ -400,7 +446,7 @@ class ShortcutOverviewDialog(QDialog):
             for shortcut, idx in shortcuts_dict.items():
                 if 0 <= idx < len(presets):
                     preset_name = presets[idx]["name"]
-                    preset_layout.addWidget(self.create_shortcut_item(shortcut, preset_name))
+                    preset_layout.addWidget(self.create_shortcut_item(format_shortcut_for_display(shortcut), preset_name))
         else:
             no_shortcuts = QLabel("Keine Preset-Shortcuts definiert")
             no_shortcuts.setObjectName("section_subtitle")
@@ -532,6 +578,7 @@ class APIManager(QMainWindow):
         # Prepare pynput global hotkey structures
         self._pynput_listener = None
         self._global_hotkey_map = {}
+        self._shortcut_to_pynput = {}
         if PYNPUT_AVAILABLE:
             # Start listener if there are already shortcuts
             self._update_pynput_listener()
@@ -616,7 +663,7 @@ class APIManager(QMainWindow):
         except Exception as e:
             print(f"[DEBUG] Failed to start pynput listener: {e}", file=sys.stderr)
 
-    def _register_global_hotkey(self, qt_shortcut: str, preset_index: int):
+    def _register_global_hotkey(self, qt_shortcut: str, preset_index: int, canonical: str):
         """Adds or updates the mapping used by the pynput listener and restarts it."""
         if not PYNPUT_AVAILABLE or not qt_shortcut:
             return
@@ -634,8 +681,19 @@ class APIManager(QMainWindow):
                     pass
             return _cb
 
+        # Remove existing mapping for the same canonical shortcut
+        if canonical:
+            existing_key = self._shortcut_to_pynput.get(canonical)
+            if existing_key and existing_key in self._global_hotkey_map:
+                try:
+                    del self._global_hotkey_map[existing_key]
+                except Exception:
+                    pass
+
         # Store mapping and restart listener
         self._global_hotkey_map[pynput_hotkey] = make_callback(preset_index)
+        if canonical:
+            self._shortcut_to_pynput[canonical] = pynput_hotkey
         self._update_pynput_listener()
 
     def eventFilter(self, obj, event):
@@ -821,54 +879,114 @@ class APIManager(QMainWindow):
         """Lädt beim Start alle in presets.json gespeicherten Shortcuts und registriert sie."""
         for idx, preset in enumerate(self.backend.presets):
             shortcut = preset.get('shortcut', '')
-            if shortcut:
-                self.register_preset_shortcut(shortcut, idx)
+            if not shortcut:
+                continue
+            try:
+                canonical = canonicalize_shortcut(shortcut)
+            except ValueError:
+                continue
+            self.register_preset_shortcut(canonical, idx, silent=True)
 
         # Sichtbarkeits-Shortcut aus Einstellungen laden
         vis = self.backend.get_setting('show_shortcut', '')
         if vis:
-            self.register_visibility_shortcut(vis)
+            self.register_visibility_shortcut(vis, silent=True)
 
-    def register_preset_shortcut(self, shortcut_key, preset_index):
+    def reload_shortcuts(self):
+        """Entfernt alle registrierten Preset-Shortcuts und lädt sie aus der Persistenz neu."""
+        for action in list(self.preset_shortcut_actions.values()):
+            try:
+                self.removeAction(action)
+            except Exception:
+                pass
+        self.preset_shortcut_actions.clear()
+        self.preset_shortcuts.clear()
+
+        if PYNPUT_AVAILABLE:
+            if self._pynput_listener:
+                try:
+                    self._pynput_listener.stop()
+                except Exception:
+                    pass
+                self._pynput_listener = None
+            self._global_hotkey_map.clear()
+            self._shortcut_to_pynput.clear()
+
+        self.load_saved_shortcuts()
+
+    def _unregister_global_hotkey(self, shortcut_key: str):
+        if not PYNPUT_AVAILABLE or not shortcut_key:
+            return
+        pynput_key = self._shortcut_to_pynput.pop(shortcut_key, None)
+        if pynput_key and pynput_key in self._global_hotkey_map:
+            try:
+                del self._global_hotkey_map[pynput_key]
+            except Exception:
+                pass
+            self._update_pynput_listener()
+
+    def register_preset_shortcut(self, shortcut_key, preset_index, *, silent: bool = False):
         """Registriert einen Shortcut für ein Preset mit korrekter QKeySequence-Unterstützung"""
         if not shortcut_key:
-            return
+            return False
+
+        try:
+            canonical = canonicalize_shortcut(shortcut_key)
+        except ValueError as exc:
+            if not silent:
+                self.show_toast(str(exc))
+            return False
+
+        existing = self.preset_shortcuts.get(canonical)
+        if existing is not None and existing != preset_index:
+            if not silent:
+                conflict = self.backend.presets[existing]["name"] if existing < len(self.backend.presets) else "anderes Preset"
+                self.show_toast(f"⚠️ Shortcut bereits vergeben ({format_shortcut_for_display(canonical)} → {conflict})")
+            return False
 
         # Entferne alte Shortcuts für dieses Preset
         for key, idx in list(self.preset_shortcuts.items()):
-            if idx == preset_index:
+            if idx == preset_index and key != canonical:
                 if key in self.preset_shortcut_actions:
-                    self.removeAction(self.preset_shortcut_actions[key])
+                    try:
+                        self.removeAction(self.preset_shortcut_actions[key])
+                    except Exception:
+                        pass
                     del self.preset_shortcut_actions[key]
                 del self.preset_shortcuts[key]
+                self._unregister_global_hotkey(key)
 
-        # Normalize and canonicalize for QKeySequence
-        normalized = normalize_shortcut_for_platform(shortcut_key)
-        qt_shortcut = canonicalize_shortcut_for_qt(normalized)
+        qt_shortcut = canonicalize_shortcut_for_qt(canonical)
+        print(f"[DEBUG] Registriere Shortcut: {canonical} -> QKeySequence: {qt_shortcut}")
 
-        print(f"[DEBUG] Registriere Shortcut: {shortcut_key} -> QKeySequence: {qt_shortcut}")
+        # Entferne evtl. vorhandene Action (z.B. gleiche Kombination)
+        if canonical in self.preset_shortcut_actions:
+            try:
+                self.removeAction(self.preset_shortcut_actions[canonical])
+            except Exception:
+                pass
 
-        # Erstelle die Action
         action = QAction(self)
         action.setShortcut(QKeySequence(qt_shortcut))
         action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
-        action.triggered.connect(lambda idx=preset_index, key=shortcut_key: self.on_preset_shortcut_triggered(idx, key))
+        action.triggered.connect(lambda idx=preset_index, key=canonical: self.on_preset_shortcut_triggered(idx, key))
         self.addAction(action)
 
-        self.preset_shortcuts[shortcut_key] = preset_index
-        self.preset_shortcut_actions[shortcut_key] = action
+        self.preset_shortcuts[canonical] = preset_index
+        self.preset_shortcut_actions[canonical] = action
 
         print(f"[DEBUG] Shortcut registriert. Aktive Shortcuts: {self.preset_shortcuts}")
-        self.show_toast(f"✓ Shortcut {shortcut_key} aktiviert")
+        if not silent:
+            self.show_toast(f"✓ Shortcut {format_shortcut_for_display(canonical)} aktiviert")
 
         # Wenn pynput verfügbar, registriere denselben Shortcut global
         try:
-            normalized = normalize_shortcut_for_platform(shortcut_key)
-            qt_shortcut = canonicalize_shortcut_for_qt(normalized)
-            # For global hotkeys we want a pynput-compatible string
-            self._register_global_hotkey(qt_shortcut, preset_index)
+            qt_shortcut = canonicalize_shortcut_for_qt(canonical)
+            self._register_global_hotkey(qt_shortcut, preset_index, canonical)
         except Exception:
             pass
+
+        return True
 
     def toggle_theme(self):
         """Wechselt zwischen Dark und Light Mode und speichert die Einstellung"""
@@ -888,15 +1006,43 @@ class APIManager(QMainWindow):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             shortcut = dialog.get_shortcut()
             if shortcut:
+                if shortcut in self.preset_shortcuts:
+                    conflict = self.preset_shortcuts[shortcut]
+                    if conflict < len(self.backend.presets):
+                        name = self.backend.presets[conflict]["name"]
+                    else:
+                        name = "Preset"
+                    self.show_toast(f"⚠️ Shortcut kollidiert mit '{name}'")
+                    return
+
                 if self.backend.set_setting('show_shortcut', shortcut):
-                    # (Re-)registriere Shortcut
-                    self.register_visibility_shortcut(shortcut)
-                    self.show_toast(f"Visibility Shortcut gesetzt: {shortcut}")
+                    if self.register_visibility_shortcut(shortcut):
+                        self.show_toast(f"Visibility Shortcut gesetzt: {format_shortcut_for_display(shortcut)}")
+                    else:
+                        self.backend.set_setting('show_shortcut', '')
+                        self.show_toast("Shortcut konnte nicht registriert werden")
                 else:
                     self.show_toast("Fehler beim Speichern des Shortcuts")
 
-    def register_visibility_shortcut(self, shortcut_key):
+    def register_visibility_shortcut(self, shortcut_key, *, silent: bool = False):
         """Registriert den Shortcut, der die App zeigt/versteckt."""
+        if not shortcut_key:
+            return False
+
+        try:
+            canonical = canonicalize_shortcut(shortcut_key)
+        except ValueError as exc:
+            if not silent:
+                self.show_toast(str(exc))
+            return False
+
+        if canonical in self.preset_shortcuts:
+            if not silent:
+                conflict_idx = self.preset_shortcuts[canonical]
+                conflict = self.backend.presets[conflict_idx]["name"] if conflict_idx < len(self.backend.presets) else "Preset"
+                self.show_toast(f"⚠️ Shortcut bereits als Preset genutzt ({format_shortcut_for_display(canonical)} → {conflict})")
+            return False
+
         # Entferne alte Aktion wenn vorhanden
         if hasattr(self, 'visibility_action') and getattr(self, 'visibility_action'):
             try:
@@ -904,17 +1050,15 @@ class APIManager(QMainWindow):
             except Exception:
                 pass
 
-        # Normalize and canonicalize for QKeySequence
-        normalized = normalize_shortcut_for_platform(shortcut_key)
-        qt_shortcut = canonicalize_shortcut_for_qt(normalized)
+        qt_shortcut = canonicalize_shortcut_for_qt(canonical)
 
         # Keep parsed representation to match key events in the eventFilter
-        parts = [p.strip() for p in qt_shortcut.split('+') if p.strip()]
+        parts = [p.strip() for p in canonical.split('+') if p.strip()]
         if parts:
             mods = set(parts[:-1])
             key = parts[-1]
             self.visibility_shortcut_parsed = (mods, key)
-            self.visibility_shortcut_raw = qt_shortcut
+            self.visibility_shortcut_raw = canonical
 
         action = QAction(self)
         try:
@@ -926,6 +1070,8 @@ class APIManager(QMainWindow):
         except Exception:
             # Fallback: still store parsed shortcut and rely on eventFilter
             self.visibility_action = None
+
+        return True
 
     def toggle_visibility(self):
         """Zeigt/versteckt das Hauptfenster."""
@@ -972,7 +1118,7 @@ class APIManager(QMainWindow):
             # Zeige System-Benachrichtigung
             self.tray_icon.showMessage(
                 "Zwischenablage leer",
-                f"Kopiere zuerst einen Text, dann drücke {shortcut_key}",
+                f"Kopiere zuerst einen Text, dann drücke {format_shortcut_for_display(shortcut_key)}",
                 QSystemTrayIcon.MessageIcon.Warning,
                 5000
             )
@@ -1068,35 +1214,37 @@ class APIManager(QMainWindow):
                 app.setPalette(palette)
             self.setPalette(palette)
 
-            # Modernes, farbiges Stylesheet für Dark Mode
+            # Reduziertes, modernes Stylesheet für Dark Mode
             base_styles = f"""
-                QWidget {{ background-color: #121212; color: #e6e6e6; }}
-                #top_nav {{ background-color: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.03); }}
-                #sidebar {{ background-color: #0f1720; }}
-                #sidebar_info, #sidebar_authors {{ color: #9aa6b2; }}
-                QPushButton#nav_button[active="true"] {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {accent}, stop:1 #2b6fbf); color: white; font-weight: 600; }}
-                QPushButton#nav_button {{ background: transparent; border: none; color: #cbd5e1; text-align: left; padding-left: 12px; }}
-                .content_card, .preset_card, .shortcut_card, #result_panel {{ background-color: #111316; border-radius: 12px; border: 1px solid rgba(255,255,255,0.03); }}
+                QWidget {{ background-color: #0b1120; color: #e2e8f0; font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }}
+                #top_nav {{ background-color: rgba(15, 23, 42, 0.78); border-bottom: 1px solid rgba(148, 163, 184, 0.18); }}
+                #sidebar {{ background-color: #111c2d; }}
+                #sidebar_info, #sidebar_authors {{ color: #94a3b8; }}
+                QPushButton#nav_button[active="true"] {{ background-color: rgba(99, 102, 241, 0.22); color: #f8fafc; font-weight: 600; border-radius: 10px; }}
+                QPushButton#nav_button {{ background: transparent; border: none; color: #cbd5f5; text-align: left; padding: 10px 14px; border-radius: 10px; }}
+                QPushButton#nav_button:hover {{ background-color: rgba(99, 102, 241, 0.12); }}
+                .content_card, .preset_card, .shortcut_card, #result_panel {{ background-color: rgba(15, 23, 42, 0.72); border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.16); }}
                 #page_stack {{ background: transparent; }}
-                /* Buttons */
-                QPushButton#btn_primary {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {accent}, stop:1 #1e40af); color: white; border-radius: 10px; padding: 10px 14px; font-weight: 700; }}
-                QPushButton#btn_primary:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1e40af, stop:1 {accent}); }}
-                QPushButton#btn_secondary {{ background: rgba(255,255,255,0.03); color: #e6e6e6; border-radius: 10px; padding: 8px 12px; }}
-                QPushButton#btn_secondary:hover {{ background: rgba(255,255,255,0.06); }}
-                QPushButton#btn_success {{ background: {success}; color: white; border-radius: 10px; padding: 8px 12px; }}
-                QPushButton#btn_danger {{ background: {danger}; color: white; border-radius: 10px; padding: 8px 12px; }}
-                QPushButton#btn_warning {{ background: {warning}; color: #1f1f1f; border-radius: 10px; padding: 8px 12px; }}
-                QPushButton#btn_ghost {{ background: transparent; color: {accent}; border-radius: 10px; padding: 8px 12px; }}
-                QPushButton#btn_ghost:hover {{ background: rgba(37,99,235,0.06); }}
-                /* Inputs */
-                QLineEdit, QTextEdit, QComboBox {{ background: #0b0d0f; border: 1px solid rgba(255,255,255,0.04); color: #e6e6e6; }}
-                QLineEdit[error="true"], QTextEdit[error="true"] {{ border: 1px solid {danger}; }}
-                /* Cards */
-                .preset_card {{ padding: 14px; }}
-                .section_title {{ color: #e6eefb; }}
-                QLabel#preset_meta {{ color: #9aa6b2; font-size: 12px; }}
-                /* Toast */
-                QLabel#toast {{ background: rgba(0,0,0,0.7); color: white; padding: 8px 14px; border-radius: 10px; }}
+                QPushButton#btn_primary {{ background-color: {accent}; color: #0b1120; border-radius: 12px; padding: 10px 18px; font-weight: 600; }}
+                QPushButton#btn_primary:hover {{ background-color: #4f46e5; color: #f8fafc; }}
+                QPushButton#btn_secondary {{ background-color: rgba(148, 163, 184, 0.18); color: #e2e8f0; border-radius: 12px; padding: 10px 18px; }}
+                QPushButton#btn_secondary:hover {{ background-color: rgba(148, 163, 184, 0.28); }}
+                QPushButton#btn_success {{ background-color: {success}; color: #0b1120; border-radius: 12px; padding: 10px 18px; }}
+                QPushButton#btn_danger {{ background-color: {danger}; color: #0b1120; border-radius: 12px; padding: 10px 18px; }}
+                QPushButton#btn_warning {{ background-color: {warning}; color: #0b1120; border-radius: 12px; padding: 10px 18px; }}
+                QPushButton#btn_ghost {{ background-color: transparent; color: {accent}; border-radius: 10px; padding: 8px 14px; }}
+                QPushButton#btn_ghost:hover {{ background-color: rgba(99, 102, 241, 0.14); }}
+                QLineEdit, QTextEdit, QComboBox, QKeySequenceEdit {{ background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(148, 163, 184, 0.24); color: #f1f5f9; border-radius: 12px; selection-background-color: {accent}; }}
+                QLineEdit[error="true"], QTextEdit[error="true"], QKeySequenceEdit[error="true"] {{ border: 1px solid {danger}; }}
+                QLabel#section_title {{ color: #f8fafc; }}
+                QLabel#preset_meta {{ color: #94a3b8; font-size: 12px; }}
+                QLabel#shortcut_badge {{ background-color: rgba(99, 102, 241, 0.22); color: {accent}; border-radius: 999px; padding: 4px 12px; font-weight: 600; }}
+                QLabel#toast {{ background: rgba(15, 23, 42, 0.92); color: #f8fafc; padding: 10px 18px; border-radius: 12px; }}
+                QLabel#shortcut_key {{ color: #f8fafc; font-family: 'JetBrains Mono', 'SF Mono', monospace; font-weight: 600; }}
+                QLabel#shortcut_desc {{ color: #cbd5f5; }}
+                QWidget#shortcut_item {{ background-color: rgba(15, 23, 42, 0.6); border-radius: 12px; }}
+                QSplitter::handle:horizontal {{ width: 2px; background: rgba(148, 163, 184, 0.28); }}
+                QKeySequenceEdit#shortcut_input {{ color: #f1f5f9; }}
             """
         else:
             palette = QPalette()
@@ -1119,40 +1267,44 @@ class APIManager(QMainWindow):
             self.setPalette(palette)
 
             base_styles = f"""
-                QWidget {{ background-color: #ffffff; color: #111827; }}
-                #top_nav {{ background-color: rgba(0,0,0,0.02); border-bottom: 1px solid rgba(16,24,40,0.04); }}
-                #sidebar {{ background-color: #f7fafc; }}
-                #sidebar_info, #sidebar_authors {{ color: #6b7280; }}
-                QPushButton#nav_button[active="true"] {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {accent}, stop:1 #2b6fbf); color: white; font-weight: 600; }}
-                QPushButton#nav_button {{ background: transparent; border: none; color: #0f172a; text-align: left; padding-left: 12px; }}
-                .content_card, .preset_card, .shortcut_card, #result_panel {{ background-color: #ffffff; border-radius: 12px; border: 1px solid rgba(15,23,42,0.04); box-shadow: 0 6px 18px rgba(15,23,42,0.04); }}
-                /* Buttons */
-                QPushButton#btn_primary {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {accent}, stop:1 #1e40af); color: white; border-radius: 10px; padding: 10px 14px; font-weight: 700; }}
-                QPushButton#btn_primary:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1e40af, stop:1 {accent}); }}
-                QPushButton#btn_secondary {{ background: rgba(15,23,42,0.04); color: #0f172a; border-radius: 10px; padding: 8px 12px; }}
-                QPushButton#btn_secondary:hover {{ background: rgba(15,23,42,0.06); }}
-                QPushButton#btn_success {{ background: {success}; color: white; border-radius: 10px; padding: 8px 12px; }}
-                QPushButton#btn_danger {{ background: {danger}; color: white; border-radius: 10px; padding: 8px 12px; }}
-                QPushButton#btn_warning {{ background: {warning}; color: #1f1f1f; border-radius: 10px; padding: 8px 12px; }}
-                QPushButton#btn_ghost {{ background: transparent; color: {accent}; border-radius: 10px; padding: 8px 12px; }}
-                QPushButton#btn_ghost:hover {{ background: rgba(37,99,235,0.06); }}
-                /* Inputs */
-                QLineEdit, QTextEdit, QComboBox {{ background: #ffffff; border: 1px solid rgba(15,23,42,0.06); color: #0f172a; }}
-                QLineEdit[error="true"], QTextEdit[error="true"] {{ border: 1px solid {danger}; }}
-                /* Cards */
-                .preset_card {{ padding: 14px; }}
-                .section_title {{ color: #0f172a; }}
+                QWidget {{ background-color: #f8fafc; color: #0f172a; font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }}
+                #top_nav {{ background-color: rgba(255,255,255,0.96); border-bottom: 1px solid rgba(15, 23, 42, 0.08); }}
+                #sidebar {{ background-color: #ffffff; }}
+                #sidebar_info, #sidebar_authors {{ color: #64748b; }}
+                QPushButton#nav_button[active="true"] {{ background-color: rgba(99, 102, 241, 0.2); color: #1e1b4b; font-weight: 600; border-radius: 10px; }}
+                QPushButton#nav_button {{ background: transparent; border: none; color: #334155; text-align: left; padding: 10px 14px; border-radius: 10px; }}
+                QPushButton#nav_button:hover {{ background-color: rgba(148, 163, 184, 0.22); }}
+                .content_card, .preset_card, .shortcut_card, #result_panel {{ background-color: #ffffff; border-radius: 16px; border: 1px solid rgba(15, 23, 42, 0.08); box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08); }}
+                #page_stack {{ background: transparent; }}
+                QPushButton#btn_primary {{ background-color: {accent}; color: #f8fafc; border-radius: 12px; padding: 10px 18px; font-weight: 600; }}
+                QPushButton#btn_primary:hover {{ background-color: #4f46e5; }}
+                QPushButton#btn_secondary {{ background-color: rgba(148, 163, 184, 0.24); color: #0f172a; border-radius: 12px; padding: 10px 18px; }}
+                QPushButton#btn_secondary:hover {{ background-color: rgba(148, 163, 184, 0.32); }}
+                QPushButton#btn_success {{ background-color: {success}; color: #0f172a; border-radius: 12px; padding: 10px 18px; }}
+                QPushButton#btn_danger {{ background-color: {danger}; color: #f8fafc; border-radius: 12px; padding: 10px 18px; }}
+                QPushButton#btn_warning {{ background-color: {warning}; color: #0f172a; border-radius: 12px; padding: 10px 18px; }}
+                QPushButton#btn_ghost {{ background-color: transparent; color: {accent}; border-radius: 10px; padding: 8px 14px; }}
+                QPushButton#btn_ghost:hover {{ background-color: rgba(99, 102, 241, 0.12); color: #1e1b4b; }}
+                QLineEdit, QTextEdit, QComboBox, QKeySequenceEdit {{ background: #ffffff; border: 1px solid rgba(148, 163, 184, 0.35); color: #0f172a; border-radius: 12px; selection-background-color: {accent}; }}
+                QLineEdit[error="true"], QTextEdit[error="true"], QKeySequenceEdit[error="true"] {{ border: 1px solid {danger}; }}
+                QLabel#section_title {{ color: #111827; }}
                 QLabel#preset_meta {{ color: #6b7280; font-size: 12px; }}
-                /* Toast */
-                QLabel#toast {{ background: rgba(16,24,40,0.9); color: white; padding: 8px 14px; border-radius: 10px; }}
+                QLabel#shortcut_badge {{ background-color: rgba(99, 102, 241, 0.16); color: #3730a3; border-radius: 999px; padding: 4px 12px; font-weight: 600; }}
+                QLabel#toast {{ background: rgba(15, 23, 42, 0.92); color: #f8fafc; padding: 10px 18px; border-radius: 12px; }}
+                QLabel#shortcut_key {{ color: #1e293b; font-family: 'JetBrains Mono', 'SF Mono', monospace; font-weight: 600; }}
+                QLabel#shortcut_desc {{ color: #475569; }}
+                QWidget#shortcut_item {{ background-color: rgba(148, 163, 184, 0.2); border-radius: 12px; }}
+                QSplitter::handle:horizontal {{ width: 2px; background: rgba(148, 163, 184, 0.4); }}
+                QKeySequenceEdit#shortcut_input {{ color: #0f172a; }}
             """
 
         # Gemeinsames Stylesheet-Grundgerüst (Schriftfamilie, allgemeine Rundungen)
         common = """
-            * { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; }
-            QLineEdit, QComboBox, QTextEdit { border-radius: 8px; padding: 10px; }
-            QPushButton { border-radius: 8px; padding: 8px 14px; }
-            QLabel#section_subtitle { color: rgba(100,116,139,0.9); }
+            * { font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; }
+            QLineEdit, QComboBox, QTextEdit, QKeySequenceEdit { padding: 10px 12px; }
+            QTextEdit { padding: 12px; }
+            QPushButton { border: none; }
+            QLabel#section_subtitle { color: rgba(148, 163, 184, 0.95); font-size: 15px; }
         """
 
         # Anwenden
@@ -1480,6 +1632,11 @@ class HomePage(BasePage):
         meta = QLabel(f"API: {preset['api_type']}")
         meta.setObjectName("preset_meta")
         title_layout.addWidget(meta)
+        shortcut_value = preset.get("shortcut")
+        if shortcut_value:
+            badge = QLabel(format_shortcut_for_display(shortcut_value))
+            badge.setObjectName("shortcut_badge")
+            title_layout.addWidget(badge)
         header_layout.addWidget(title_box, 1)
 
         btn_box = QWidget()
@@ -1543,11 +1700,27 @@ class HomePage(BasePage):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             shortcut = dialog.get_shortcut()
             if shortcut:
+                existing = self.controller.preset_shortcuts.get(shortcut)
+                if existing is not None and existing != index:
+                    if hasattr(self.controller, 'show_toast'):
+                        if existing < len(self.controller.backend.presets):
+                            name = self.controller.backend.presets[existing]["name"]
+                        else:
+                            name = "Preset"
+                        self.controller.show_toast(f"⚠️ Shortcut bereits vergeben an '{name}'")
+                    return
                 # Persistiere Shortcut im Backend und registriere danach
                 if self.controller.backend.save_preset_shortcut(index, shortcut):
                     # Registrierung im Controller
                     if hasattr(self.controller, 'register_preset_shortcut'):
-                        self.controller.register_preset_shortcut(shortcut, index)
+                        success = self.controller.register_preset_shortcut(shortcut, index)
+                        if not success:
+                            # Revert gespeicherten Shortcut
+                            self.controller.backend.save_preset_shortcut(index, "")
+                            if hasattr(self.controller, 'show_toast'):
+                                self.controller.show_toast("Shortcut konnte nicht registriert werden")
+                        else:
+                            self.update_presets_list()
                 else:
                     if hasattr(self.controller, 'show_toast'):
                         self.controller.show_toast("Fehler beim Speichern des Shortcuts")
@@ -1581,6 +1754,8 @@ class HomePage(BasePage):
                 if self.controller.backend.delete_preset_by_index(index):
                     if hasattr(self.controller, 'show_toast'):
                         self.controller.show_toast(f"'{p['name']}' gelöscht")
+                    if hasattr(self.controller, 'reload_shortcuts'):
+                        self.controller.reload_shortcuts()
                     self.update_presets_list()
                 else:
                     if hasattr(self.controller, 'show_toast'):
