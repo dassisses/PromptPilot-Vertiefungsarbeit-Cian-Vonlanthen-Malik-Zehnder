@@ -1,6 +1,7 @@
 import sys
 import pyperclip
 import threading
+from typing import Optional
 try:
     from pynput import keyboard as _pynput_keyboard
     PYNPUT_AVAILABLE = True
@@ -502,6 +503,16 @@ class APIManager(QMainWindow):
         self.preset_shortcut_actions = {}
         self.visibility_action = None
 
+        # Globale Hotkey-Verwaltung (pynput)
+        self._pynput_listener = None
+        self._global_hotkey_map = {}
+        self._shortcut_to_pynput = {}
+        self._visibility_pynput_key = None
+
+        # Sichtbarkeits-Shortcut Tracking
+        self.visibility_shortcut_parsed = None
+        self.visibility_shortcut_raw = None
+
         # Tray Icon Setup
         self.tray_icon = QSystemTrayIcon(self)
         self.tray_icon.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon))
@@ -564,10 +575,8 @@ class APIManager(QMainWindow):
         self.toast_timer.timeout.connect(self.hide_toast)
 
         # For improved visibility-shortcut handling install an application-level event filter
-        # and keep a parsed representation of the visibility shortcut. This ensures a single
-        # visibility shortcut is tracked and handled consistently.
-        self.visibility_shortcut_parsed = None  # (set(modifiers_str), key_str)
-        self.visibility_shortcut_raw = None
+        # and keep a parsed representation of the visibility shortcut for consistent behaviour
+        # across platforms.
         app = QApplication.instance()
         if app:
             app.installEventFilter(self)
@@ -575,27 +584,30 @@ class APIManager(QMainWindow):
         # Lade und registriere gespeicherte Preset-Shortcuts
         self.load_saved_shortcuts()
 
-        # Prepare pynput global hotkey structures
-        self._pynput_listener = None
-        self._global_hotkey_map = {}
-        self._shortcut_to_pynput = {}
-        if PYNPUT_AVAILABLE:
-            # Start listener if there are already shortcuts
+        if PYNPUT_AVAILABLE and self._global_hotkey_map:
+            # Start listener if es bereits registrierte Shortcuts gibt
             self._update_pynput_listener()
 
     def start_hotkey_listener(self):
         """(deprecated) kept for compatibility"""
         pass
 
-    def trigger_preset_by_index(self, index):
+    def trigger_preset_by_index(self, index, shortcut_key: Optional[str] = None):
         """Safely trigger preset execution on the Qt main thread from background threads."""
+
+        def _run(idx=index, key=shortcut_key):
+            if key:
+                self.on_preset_shortcut_triggered(idx, key)
+            else:
+                self.execute_preset_by_index(idx)
+
         try:
             # Use QTimer.singleShot with 0 ms to enqueue on the main thread
-            QTimer.singleShot(0, lambda idx=index: self.execute_preset_by_index(idx))
+            QTimer.singleShot(0, _run)
         except Exception:
             # Last-resort: call directly
             try:
-                self.execute_preset_by_index(index)
+                _run()
             except Exception:
                 pass
 
@@ -673,10 +685,10 @@ class APIManager(QMainWindow):
             return
 
         # Build callback
-        def make_callback(idx):
+        def make_callback(idx, shortcut):
             def _cb():
                 try:
-                    self.trigger_preset_by_index(idx)
+                    self.trigger_preset_by_index(idx, shortcut)
                 except Exception:
                     pass
             return _cb
@@ -691,9 +703,47 @@ class APIManager(QMainWindow):
                     pass
 
         # Store mapping and restart listener
-        self._global_hotkey_map[pynput_hotkey] = make_callback(preset_index)
+        self._global_hotkey_map[pynput_hotkey] = make_callback(preset_index, canonical)
         if canonical:
             self._shortcut_to_pynput[canonical] = pynput_hotkey
+        self._update_pynput_listener()
+
+    def _register_visibility_global_hotkey(self, qt_shortcut: str):
+        """Registriert den Sichtbarkeits-Shortcut auch global via pynput."""
+        if not PYNPUT_AVAILABLE or not qt_shortcut:
+            return
+
+        pynput_hotkey = self._convert_to_pynput_hotkey(qt_shortcut)
+        if not pynput_hotkey:
+            return
+
+        # Entferne vorherigen Sichtbarkeits-Hotkey aus der Map
+        if self._visibility_pynput_key and self._visibility_pynput_key in self._global_hotkey_map:
+            try:
+                del self._global_hotkey_map[self._visibility_pynput_key]
+            except Exception:
+                pass
+
+        self._visibility_pynput_key = pynput_hotkey
+
+        def _cb():
+            try:
+                QTimer.singleShot(0, self.toggle_visibility)
+            except Exception:
+                pass
+
+        self._global_hotkey_map[pynput_hotkey] = _cb
+        self._update_pynput_listener()
+
+    def _unregister_visibility_global_hotkey(self):
+        if not PYNPUT_AVAILABLE:
+            return
+        if self._visibility_pynput_key and self._visibility_pynput_key in self._global_hotkey_map:
+            try:
+                del self._global_hotkey_map[self._visibility_pynput_key]
+            except Exception:
+                pass
+        self._visibility_pynput_key = None
         self._update_pynput_listener()
 
     def eventFilter(self, obj, event):
@@ -911,6 +961,7 @@ class APIManager(QMainWindow):
                 self._pynput_listener = None
             self._global_hotkey_map.clear()
             self._shortcut_to_pynput.clear()
+            self._visibility_pynput_key = None
 
         self.load_saved_shortcuts()
 
@@ -1050,6 +1101,10 @@ class APIManager(QMainWindow):
             except Exception:
                 pass
 
+        # Entferne auch ggf. registrierten globalen Sichtbarkeits-Hotkey,
+        # bevor ein neuer gesetzt wird.
+        self._unregister_visibility_global_hotkey()
+
         qt_shortcut = canonicalize_shortcut_for_qt(canonical)
 
         # Keep parsed representation to match key events in the eventFilter
@@ -1070,6 +1125,11 @@ class APIManager(QMainWindow):
         except Exception:
             # Fallback: still store parsed shortcut and rely on eventFilter
             self.visibility_action = None
+
+        try:
+            self._register_visibility_global_hotkey(qt_shortcut)
+        except Exception:
+            pass
 
         return True
 
@@ -1098,6 +1158,12 @@ class APIManager(QMainWindow):
 
         if preset_index < 0 or preset_index >= len(self.backend.presets):
             self.show_toast("❌ Preset nicht gefunden")
+            self.tray_icon.showMessage(
+                "Preset nicht gefunden",
+                f"Der Shortcut {format_shortcut_for_display(shortcut_key)} verweist auf ein unbekanntes Preset.",
+                QSystemTrayIcon.MessageIcon.Critical,
+                4000
+            )
             print(f"[DEBUG] Fehler: Preset-Index {preset_index} außerhalb des Bereichs")
             return
 
@@ -1109,6 +1175,12 @@ class APIManager(QMainWindow):
             print(f"[DEBUG] Zwischenablage gelesen: {len(clipboard_text) if clipboard_text else 0} Zeichen")
         except Exception as e:
             self.show_toast(f"❌ Fehler beim Lesen der Zwischenablage: {str(e)}")
+            self.tray_icon.showMessage(
+                "Zwischenablage-Fehler",
+                f"{format_shortcut_for_display(shortcut_key)} konnte nicht ausgeführt werden: {str(e)}",
+                QSystemTrayIcon.MessageIcon.Critical,
+                5000
+            )
             print(f"[DEBUG] Fehler beim Lesen der Zwischenablage: {e}")
             return
 
@@ -1127,7 +1199,10 @@ class APIManager(QMainWindow):
         print(f"[DEBUG] Starte Preset-Verarbeitung...")
         self.show_toast(f"⚙️ Verarbeite mit '{preset['name']}'...")
         self.home_page.show_loading()
-        QTimer.singleShot(100, lambda: self._execute_preset_async(preset, clipboard_text))
+        QTimer.singleShot(
+            100,
+            lambda p=preset, text=clipboard_text, key=shortcut_key: self._execute_preset_async(p, text, key)
+        )
 
     def execute_preset_by_index(self, preset_index):
         if preset_index < 0 or preset_index >= len(self.backend.presets):
@@ -1143,9 +1218,9 @@ class APIManager(QMainWindow):
 
         self.show_toast(f"Verarbeite mit '{preset['name']}'...")
         self.home_page.show_loading()
-        QTimer.singleShot(100, lambda: self._execute_preset_async(preset, clipboard_text))
+        QTimer.singleShot(100, lambda p=preset, text=clipboard_text: self._execute_preset_async(p, text))
 
-    def _execute_preset_async(self, preset, clipboard_text):
+    def _execute_preset_async(self, preset, clipboard_text, triggered_shortcut: Optional[str] = None):
         """Führt das Preset asynchron aus"""
         print(f"[DEBUG] Starte Preset-Ausführung: {preset['name']}")
         result = self.backend.execute_preset(preset["name"], clipboard_text)
@@ -1156,19 +1231,32 @@ class APIManager(QMainWindow):
             self.show_toast("✅ Fertig! Ergebnis kopiert", 3000)
             self.home_page.show_result(preset["name"], clipboard_text, response)
 
-            # Show system notification if minimized
-            if self.isMinimized():
+            # Show system notification if via Shortcut oder Fenster minimiert
+            if triggered_shortcut or self.isMinimized():
+                shortcut_info = ""
+                if triggered_shortcut:
+                    shortcut_info = f" ({format_shortcut_for_display(triggered_shortcut)})"
                 self.tray_icon.showMessage(
                     "✅ Preset abgeschlossen",
-                    f"Das Preset '{preset['name']}' wurde erfolgreich ausgeführt.",
+                    f"'{preset['name']}'{shortcut_info} wurde erfolgreich ausgeführt. Ergebnis befindet sich in der Zwischenablage.",
                     QSystemTrayIcon.MessageIcon.Information,
-                    3000
+                    3500
                 )
         else:
             error_msg = result.get("message", "Unbekannter Fehler")
             print(f"[DEBUG] Fehler bei Preset-Ausführung: {error_msg}")
             self.show_toast(f"❌ Fehler: {error_msg}", 3000)
             self.home_page.show_error(error_msg)
+            if triggered_shortcut or self.isMinimized():
+                shortcut_info = ""
+                if triggered_shortcut:
+                    shortcut_info = f" ({format_shortcut_for_display(triggered_shortcut)})"
+                self.tray_icon.showMessage(
+                    "❌ Preset fehlgeschlagen",
+                    f"'{preset['name']}'{shortcut_info} konnte nicht ausgeführt werden: {error_msg}",
+                    QSystemTrayIcon.MessageIcon.Critical,
+                    4000
+                )
 
     def show_toast(self, message, duration=2000):
         self.toast_label.setText(message)
@@ -1237,12 +1325,16 @@ class APIManager(QMainWindow):
                 QLineEdit, QTextEdit, QComboBox, QKeySequenceEdit {{ background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(148, 163, 184, 0.24); color: #f1f5f9; border-radius: 12px; selection-background-color: {accent}; }}
                 QLineEdit[error="true"], QTextEdit[error="true"], QKeySequenceEdit[error="true"] {{ border: 1px solid {danger}; }}
                 QLabel#section_title {{ color: #f8fafc; }}
+                QLabel#preset_header {{ color: #f8fafc; font-size: 16px; font-weight: 600; }}
                 QLabel#preset_meta {{ color: #94a3b8; font-size: 12px; }}
+                QLabel#presets_counter {{ color: #94a3b8; font-size: 13px; font-weight: 600; }}
                 QLabel#shortcut_badge {{ background-color: rgba(99, 102, 241, 0.22); color: {accent}; border-radius: 999px; padding: 4px 12px; font-weight: 600; }}
                 QLabel#toast {{ background: rgba(15, 23, 42, 0.92); color: #f8fafc; padding: 10px 18px; border-radius: 12px; }}
                 QLabel#shortcut_key {{ color: #f8fafc; font-family: 'JetBrains Mono', 'SF Mono', monospace; font-weight: 600; }}
                 QLabel#shortcut_desc {{ color: #cbd5f5; }}
                 QWidget#shortcut_item {{ background-color: rgba(15, 23, 42, 0.6); border-radius: 12px; }}
+                QWidget#empty_state {{ background: transparent; color: #94a3b8; }}
+                QScrollArea#preset_scroll {{ border: none; background: transparent; }}
                 QSplitter::handle:horizontal {{ width: 2px; background: rgba(148, 163, 184, 0.28); }}
                 QKeySequenceEdit#shortcut_input {{ color: #f1f5f9; }}
             """
@@ -1288,12 +1380,16 @@ class APIManager(QMainWindow):
                 QLineEdit, QTextEdit, QComboBox, QKeySequenceEdit {{ background: #ffffff; border: 1px solid rgba(148, 163, 184, 0.35); color: #0f172a; border-radius: 12px; selection-background-color: {accent}; }}
                 QLineEdit[error="true"], QTextEdit[error="true"], QKeySequenceEdit[error="true"] {{ border: 1px solid {danger}; }}
                 QLabel#section_title {{ color: #111827; }}
+                QLabel#preset_header {{ color: #0f172a; font-size: 16px; font-weight: 600; }}
                 QLabel#preset_meta {{ color: #6b7280; font-size: 12px; }}
+                QLabel#presets_counter {{ color: #64748b; font-size: 13px; font-weight: 600; }}
                 QLabel#shortcut_badge {{ background-color: rgba(99, 102, 241, 0.16); color: #3730a3; border-radius: 999px; padding: 4px 12px; font-weight: 600; }}
                 QLabel#toast {{ background: rgba(15, 23, 42, 0.92); color: #f8fafc; padding: 10px 18px; border-radius: 12px; }}
                 QLabel#shortcut_key {{ color: #1e293b; font-family: 'JetBrains Mono', 'SF Mono', monospace; font-weight: 600; }}
                 QLabel#shortcut_desc {{ color: #475569; }}
                 QWidget#shortcut_item {{ background-color: rgba(148, 163, 184, 0.2); border-radius: 12px; }}
+                QWidget#empty_state {{ background: transparent; color: #94a3b8; }}
+                QScrollArea#preset_scroll {{ border: none; background: transparent; }}
                 QSplitter::handle:horizontal {{ width: 2px; background: rgba(148, 163, 184, 0.4); }}
                 QKeySequenceEdit#shortcut_input {{ color: #0f172a; }}
             """
@@ -1358,26 +1454,45 @@ class HomePage(BasePage):
         header_layout.addWidget(subtitle)
         left_layout.addLayout(header_layout)
 
-        # Suche
-        search_card = QWidget()
-        search_card.setObjectName("content_card")
-        search_layout = QVBoxLayout(search_card)
-        search_layout.setSpacing(10)
+        # Suche + Preset-Liste in einem Card-Container
+        library_card = QWidget()
+        library_card.setObjectName("content_card")
+        library_layout = QVBoxLayout(library_card)
+        library_layout.setSpacing(18)
+        library_layout.setContentsMargins(24, 24, 24, 24)
+
+        header_row = QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 0)
+        header_row.setSpacing(12)
         search_label = QLabel("Suche")
         search_label.setObjectName("input_label")
-        search_layout.addWidget(search_label)
+        header_row.addWidget(search_label)
+        header_row.addStretch()
+        self.preset_count_label = QLabel("")
+        self.preset_count_label.setObjectName("presets_counter")
+        header_row.addWidget(self.preset_count_label)
+        library_layout.addLayout(header_row)
+
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Nach Name oder Prompt suchen...")
+        self.search_input.setClearButtonEnabled(True)
         self.search_input.textChanged.connect(self.filter_presets)
-        search_layout.addWidget(self.search_input)
-        left_layout.addWidget(search_card)
+        library_layout.addWidget(self.search_input)
 
-        # Preset-Liste (keine ScrollArea - alle Presets sollen in einem Blick sichtbar sein)
+        self.presets_scroll = QScrollArea()
+        self.presets_scroll.setObjectName("preset_scroll")
+        self.presets_scroll.setWidgetResizable(True)
+        self.presets_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.presets_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
         self.presets_container = QWidget()
         self.presets_layout = QVBoxLayout(self.presets_container)
         self.presets_layout.setSpacing(16)
-        self.presets_layout.setContentsMargins(0, 0, 10, 0)
-        left_layout.addWidget(self.presets_container, 1)
+        self.presets_layout.setContentsMargins(0, 0, 0, 0)
+        self.presets_scroll.setWidget(self.presets_container)
+        library_layout.addWidget(self.presets_scroll, 1)
+
+        left_layout.addWidget(library_card, 1)
         self.main_splitter.addWidget(left_widget)
 
         # RIGHT: Form + Result
@@ -1543,14 +1658,24 @@ class HomePage(BasePage):
     def update_presets_list(self):
         # Alle Widgets entfernen
         for i in reversed(range(self.presets_layout.count())):
-            w = self.presets_layout.itemAt(i).widget()
-            if w:
-                w.deleteLater()
+            item = self.presets_layout.takeAt(i)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
 
         presets = self.controller.presets
         filtered = [(i, p) for i, p in enumerate(presets) if not self.current_search or
                     self.current_search.lower() in p["name"].lower() or
                     self.current_search.lower() in p["prompt"].lower()]
+
+        total = len(filtered)
+        if hasattr(self, 'preset_count_label'):
+            if total == 0:
+                self.preset_count_label.setText("Keine Presets")
+            elif total == 1:
+                self.preset_count_label.setText("1 Preset")
+            else:
+                self.preset_count_label.setText(f"{total} Presets")
 
         if not filtered:
             empty = QWidget()
@@ -1626,8 +1751,14 @@ class HomePage(BasePage):
         title_layout = QVBoxLayout(title_box)
         title_layout.setContentsMargins(0, 0, 0, 0)
         title_layout.setSpacing(6)
-        title = QLabel(preset["name"])
+        original_name = preset["name"]
+        display_name = original_name
+        if len(display_name) > MAX_PRESET_NAME_LENGTH:
+            display_name = original_name[:MAX_PRESET_NAME_LENGTH - 1] + "…"
+        title = QLabel(display_name)
         title.setObjectName("preset_header")
+        if display_name != original_name:
+            title.setToolTip(original_name)
         title_layout.addWidget(title)
         meta = QLabel(f"API: {preset['api_type']}")
         meta.setObjectName("preset_meta")
@@ -1685,12 +1816,15 @@ class HomePage(BasePage):
         layout.addWidget(header)
 
         prompt = preset["prompt"]
+        truncated_prompt = prompt
         if len(prompt) > 180:
-            prompt = prompt[:180] + "..."
+            truncated_prompt = prompt[:180].rstrip() + "…"
 
-        prompt_label = QLabel(prompt)
+        prompt_label = QLabel(truncated_prompt)
         prompt_label.setObjectName("preset_prompt")
         prompt_label.setWordWrap(True)
+        if truncated_prompt != prompt:
+            prompt_label.setToolTip(prompt)
         layout.addWidget(prompt_label)
 
         return card
