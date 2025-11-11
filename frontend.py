@@ -1,6 +1,13 @@
 import sys
 import pyperclip
-from PySide6.QtCore import Qt, QTimer
+import threading
+try:
+    from pynput import keyboard as _pynput_keyboard
+    PYNPUT_AVAILABLE = True
+except Exception:
+    _pynput_keyboard = None
+    PYNPUT_AVAILABLE = False
+from PySide6.QtCore import Qt, QTimer, QEvent
 from PySide6.QtGui import QFont, QAction, QKeySequence, QPalette, QColor
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QLineEdit,
@@ -14,6 +21,12 @@ from backend import APIBackend
 
 
 # ===== HELPER FUNCTIONS (müssen vor den Klassen definiert sein) =====
+
+# New UI / behavior constants
+MAX_PRESET_NAME_LENGTH = 30  # displayed length before truncation
+MAX_PRESET_NAME_STORE = 60   # max length allowed for storing names
+EDIT_BUTTON_COLOR = "#7c3aed"  # violet-ish instead of yellow for the edit button
+
 
 def is_valid_shortcut(shortcut_str: str, platform: str = None) -> tuple:
     """
@@ -164,6 +177,7 @@ class EditPresetDialog(QDialog):
         self.name_input = QLineEdit()
         self.name_input.setPlaceholderText("z.B. Text Zusammenfassung")
         self.name_input.setMinimumHeight(40)
+        self.name_input.setMaxLength(MAX_PRESET_NAME_STORE)
         if preset_data:
             self.name_input.setText(preset_data.get("name", ""))
         layout.addWidget(self.name_input)
@@ -503,8 +517,176 @@ class APIManager(QMainWindow):
         self.toast_timer = QTimer(self)
         self.toast_timer.timeout.connect(self.hide_toast)
 
+        # For improved visibility-shortcut handling install an application-level event filter
+        # and keep a parsed representation of the visibility shortcut. This ensures a single
+        # visibility shortcut is tracked and handled consistently.
+        self.visibility_shortcut_parsed = None  # (set(modifiers_str), key_str)
+        self.visibility_shortcut_raw = None
+        app = QApplication.instance()
+        if app:
+            app.installEventFilter(self)
+
         # Lade und registriere gespeicherte Preset-Shortcuts
         self.load_saved_shortcuts()
+
+        # Prepare pynput global hotkey structures
+        self._pynput_listener = None
+        self._global_hotkey_map = {}
+        if PYNPUT_AVAILABLE:
+            # Start listener if there are already shortcuts
+            self._update_pynput_listener()
+
+    def start_hotkey_listener(self):
+        """(deprecated) kept for compatibility"""
+        pass
+
+    def trigger_preset_by_index(self, index):
+        """Safely trigger preset execution on the Qt main thread from background threads."""
+        try:
+            # Use QTimer.singleShot with 0 ms to enqueue on the main thread
+            QTimer.singleShot(0, lambda idx=index: self.execute_preset_by_index(idx))
+        except Exception:
+            # Last-resort: call directly
+            try:
+                self.execute_preset_by_index(index)
+            except Exception:
+                pass
+
+    def _convert_to_pynput_hotkey(self, qt_shortcut: str) -> str:
+        """Convert a canonicalized Qt-like shortcut (e.g. 'Ctrl+Alt+Z') to a pynput GlobalHotKeys string ('<ctrl>+<alt>+z')."""
+        if not qt_shortcut:
+            return ""
+        parts = [p.strip() for p in qt_shortcut.split('+') if p.strip()]
+        if not parts:
+            return ""
+
+        mod_map = {
+            'Ctrl': 'ctrl', 'Control': 'ctrl', 'Shift': 'shift', 'Alt': 'alt', 'Option': 'alt',
+            'Meta': 'cmd', 'Cmd': 'cmd', 'AltGr': 'alt_gr'
+        }
+
+        tokens = []
+        for p in parts[:-1]:
+            low = mod_map.get(p, p).lower()
+            # wrap standard modifiers
+            if low in ('ctrl', 'shift', 'alt', 'cmd'):
+                tokens.append(f"<{low}>")
+            else:
+                tokens.append(f"<{low}>")
+
+        key = parts[-1]
+        # single character keys -> lower
+        if len(key) == 1:
+            key_token = key.lower()
+        else:
+            # Named keys: try to map common ones
+            named = {
+                'Enter': 'enter', 'Return': 'enter', 'Space': 'space', 'Tab': 'tab',
+                'Backspace': 'backspace', 'Delete': 'delete', 'Escape': 'esc',
+                'Esc': 'esc'
+            }
+            key_token = named.get(key, key.lower())
+
+        tokens.append(key_token)
+        return '+'.join(tokens)
+
+    def _update_pynput_listener(self):
+        """Starts or restarts the pynput GlobalHotKeys listener with current _global_hotkey_map."""
+        if not PYNPUT_AVAILABLE:
+            return
+
+        # Stop previous listener if running
+        try:
+            if self._pynput_listener:
+                try:
+                    self._pynput_listener.stop()
+                except Exception:
+                    pass
+                self._pynput_listener = None
+        except Exception:
+            pass
+
+        if not self._global_hotkey_map:
+            return
+
+        try:
+            self._pynput_listener = _pynput_keyboard.GlobalHotKeys(self._global_hotkey_map)
+            # run listener in a daemon thread
+            threading.Thread(target=self._pynput_listener.start, daemon=True).start()
+        except Exception as e:
+            print(f"[DEBUG] Failed to start pynput listener: {e}", file=sys.stderr)
+
+    def _register_global_hotkey(self, qt_shortcut: str, preset_index: int):
+        """Adds or updates the mapping used by the pynput listener and restarts it."""
+        if not PYNPUT_AVAILABLE or not qt_shortcut:
+            return
+
+        pynput_hotkey = self._convert_to_pynput_hotkey(qt_shortcut)
+        if not pynput_hotkey:
+            return
+
+        # Build callback
+        def make_callback(idx):
+            def _cb():
+                try:
+                    self.trigger_preset_by_index(idx)
+                except Exception:
+                    pass
+            return _cb
+
+        # Store mapping and restart listener
+        self._global_hotkey_map[pynput_hotkey] = make_callback(preset_index)
+        self._update_pynput_listener()
+
+    def eventFilter(self, obj, event):
+        # Intercept key events to handle visibility shortcut reliably while app is running.
+        if event.type() == QEvent.Type.KeyPress and self.visibility_shortcut_parsed:
+            mods_set, key_str = self.visibility_shortcut_parsed
+
+            # Compare modifiers
+            ev_mods = set()
+            if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                ev_mods.add('Ctrl')
+            if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                ev_mods.add('Shift')
+            if event.modifiers() & Qt.KeyboardModifier.AltModifier:
+                ev_mods.add('Alt')
+            if event.modifiers() & Qt.KeyboardModifier.MetaModifier:
+                ev_mods.add('Meta')
+
+            # Key compare (letters/digits)
+            key_name = None
+            try:
+                # Letters and digits: Qt.Key_A..Qt.Key_Z, Qt.Key_0..Qt.Key_9
+                val = event.key()
+                if Qt.Key_A <= val <= Qt.Key_Z:
+                    key_name = chr(val)
+                elif Qt.Key_0 <= val <= Qt.Key_9:
+                    key_name = chr(val)
+                else:
+                    # Fallback: map common keys
+                    common = {
+                        Qt.Key_Return: 'Enter', Qt.Key_Enter: 'Enter', Qt.Key_Space: 'Space', Qt.Key_Tab: 'Tab',
+                        Qt.Key_Backspace: 'Backspace', Qt.Key_Delete: 'Delete', Qt.Key_Escape: 'Escape'
+                    }
+                    key_name = common.get(val, None)
+            except Exception:
+                key_name = None
+
+            if key_name:
+                # Normalize to uppercase single-char if necessary
+                if len(key_name) == 1:
+                    key_name = key_name.upper()
+
+                if ev_mods == mods_set and key_name == key_str:
+                    # Trigger toggle and consume event
+                    try:
+                        self.toggle_visibility()
+                    except Exception:
+                        pass
+                    return True
+
+        return super().eventFilter(obj, event)
 
     def create_top_nav(self):
         self.top_nav = QWidget()
@@ -679,6 +861,15 @@ class APIManager(QMainWindow):
         print(f"[DEBUG] Shortcut registriert. Aktive Shortcuts: {self.preset_shortcuts}")
         self.show_toast(f"✓ Shortcut {shortcut_key} aktiviert")
 
+        # Wenn pynput verfügbar, registriere denselben Shortcut global
+        try:
+            normalized = normalize_shortcut_for_platform(shortcut_key)
+            qt_shortcut = canonicalize_shortcut_for_qt(normalized)
+            # For global hotkeys we want a pynput-compatible string
+            self._register_global_hotkey(qt_shortcut, preset_index)
+        except Exception:
+            pass
+
     def toggle_theme(self):
         """Wechselt zwischen Dark und Light Mode und speichert die Einstellung"""
         new_theme = 'light' if self.current_theme == 'dark' else 'dark'
@@ -717,12 +908,24 @@ class APIManager(QMainWindow):
         normalized = normalize_shortcut_for_platform(shortcut_key)
         qt_shortcut = canonicalize_shortcut_for_qt(normalized)
 
+        # Keep parsed representation to match key events in the eventFilter
+        parts = [p.strip() for p in qt_shortcut.split('+') if p.strip()]
+        if parts:
+            mods = set(parts[:-1])
+            key = parts[-1]
+            self.visibility_shortcut_parsed = (mods, key)
+            self.visibility_shortcut_raw = qt_shortcut
+
         action = QAction(self)
-        action.setShortcut(QKeySequence(qt_shortcut))
-        action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
-        action.triggered.connect(self.toggle_visibility)
-        self.addAction(action)
-        self.visibility_action = action
+        try:
+            action.setShortcut(QKeySequence(qt_shortcut))
+            action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+            action.triggered.connect(self.toggle_visibility)
+            self.addAction(action)
+            self.visibility_action = action
+        except Exception:
+            # Fallback: still store parsed shortcut and rely on eventFilter
+            self.visibility_action = None
 
     def toggle_visibility(self):
         """Zeigt/versteckt das Hauptfenster."""
@@ -838,7 +1041,7 @@ class APIManager(QMainWindow):
     def apply_stylesheets(self, theme='dark'):
         """Wendet Stylesheet und Palette für das gewählte Theme an (dark/light)."""
         # Farben definieren
-        accent = "#58a6ff"  # Primär-Akzent
+        accent = "#2563eb"  # Primär-Akzent (deeper blue)
         success = "#3fb950"
         danger = "#f85149"
         warning = "#ffb86b"
@@ -876,15 +1079,15 @@ class APIManager(QMainWindow):
                 .content_card, .preset_card, .shortcut_card, #result_panel {{ background-color: #111316; border-radius: 12px; border: 1px solid rgba(255,255,255,0.03); }}
                 #page_stack {{ background: transparent; }}
                 /* Buttons */
-                QPushButton#btn_primary {{ background: {accent}; color: white; border-radius: 10px; padding: 10px 14px; }}
-                QPushButton#btn_primary:hover {{ background: #3f8fe6; }}
+                QPushButton#btn_primary {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {accent}, stop:1 #1e40af); color: white; border-radius: 10px; padding: 10px 14px; font-weight: 700; }}
+                QPushButton#btn_primary:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1e40af, stop:1 {accent}); }}
                 QPushButton#btn_secondary {{ background: rgba(255,255,255,0.03); color: #e6e6e6; border-radius: 10px; padding: 8px 12px; }}
                 QPushButton#btn_secondary:hover {{ background: rgba(255,255,255,0.06); }}
                 QPushButton#btn_success {{ background: {success}; color: white; border-radius: 10px; padding: 8px 12px; }}
                 QPushButton#btn_danger {{ background: {danger}; color: white; border-radius: 10px; padding: 8px 12px; }}
                 QPushButton#btn_warning {{ background: {warning}; color: #1f1f1f; border-radius: 10px; padding: 8px 12px; }}
-                QPushButton#btn_ghost {{ background: transparent; color: #9fb3ff; border-radius: 10px; padding: 8px 12px; }}
-                QPushButton#btn_ghost:hover {{ background: rgba(88,166,255,0.06); }}
+                QPushButton#btn_ghost {{ background: transparent; color: {accent}; border-radius: 10px; padding: 8px 12px; }}
+                QPushButton#btn_ghost:hover {{ background: rgba(37,99,235,0.06); }}
                 /* Inputs */
                 QLineEdit, QTextEdit, QComboBox {{ background: #0b0d0f; border: 1px solid rgba(255,255,255,0.04); color: #e6e6e6; }}
                 QLineEdit[error="true"], QTextEdit[error="true"] {{ border: 1px solid {danger}; }}
@@ -924,15 +1127,15 @@ class APIManager(QMainWindow):
                 QPushButton#nav_button {{ background: transparent; border: none; color: #0f172a; text-align: left; padding-left: 12px; }}
                 .content_card, .preset_card, .shortcut_card, #result_panel {{ background-color: #ffffff; border-radius: 12px; border: 1px solid rgba(15,23,42,0.04); box-shadow: 0 6px 18px rgba(15,23,42,0.04); }}
                 /* Buttons */
-                QPushButton#btn_primary {{ background: {accent}; color: white; border-radius: 10px; padding: 10px 14px; }}
-                QPushButton#btn_primary:hover {{ background: #3f8fe6; }}
+                QPushButton#btn_primary {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {accent}, stop:1 #1e40af); color: white; border-radius: 10px; padding: 10px 14px; font-weight: 700; }}
+                QPushButton#btn_primary:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1e40af, stop:1 {accent}); }}
                 QPushButton#btn_secondary {{ background: rgba(15,23,42,0.04); color: #0f172a; border-radius: 10px; padding: 8px 12px; }}
                 QPushButton#btn_secondary:hover {{ background: rgba(15,23,42,0.06); }}
                 QPushButton#btn_success {{ background: {success}; color: white; border-radius: 10px; padding: 8px 12px; }}
                 QPushButton#btn_danger {{ background: {danger}; color: white; border-radius: 10px; padding: 8px 12px; }}
                 QPushButton#btn_warning {{ background: {warning}; color: #1f1f1f; border-radius: 10px; padding: 8px 12px; }}
                 QPushButton#btn_ghost {{ background: transparent; color: {accent}; border-radius: 10px; padding: 8px 12px; }}
-                QPushButton#btn_ghost:hover {{ background: rgba(88,166,255,0.06); }}
+                QPushButton#btn_ghost:hover {{ background: rgba(37,99,235,0.06); }}
                 /* Inputs */
                 QLineEdit, QTextEdit, QComboBox {{ background: #ffffff; border: 1px solid rgba(15,23,42,0.06); color: #0f172a; }}
                 QLineEdit[error="true"], QTextEdit[error="true"] {{ border: 1px solid {danger}; }}
@@ -1017,16 +1220,12 @@ class HomePage(BasePage):
         search_layout.addWidget(self.search_input)
         left_layout.addWidget(search_card)
 
-        # Preset-Liste
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        # Preset-Liste (keine ScrollArea - alle Presets sollen in einem Blick sichtbar sein)
         self.presets_container = QWidget()
         self.presets_layout = QVBoxLayout(self.presets_container)
         self.presets_layout.setSpacing(16)
         self.presets_layout.setContentsMargins(0, 0, 10, 0)
-        scroll.setWidget(self.presets_container)
-        left_layout.addWidget(scroll, 1)
+        left_layout.addWidget(self.presets_container, 1)
         self.main_splitter.addWidget(left_widget)
 
         # RIGHT: Form + Result
@@ -1051,6 +1250,7 @@ class HomePage(BasePage):
         self.preset_name_input = QLineEdit()
         self.preset_name_input.setPlaceholderText("z.B. Text Zusammenfassung")
         self.preset_name_input.textChanged.connect(self.validate_form)
+        self.preset_name_input.setMaxLength(MAX_PRESET_NAME_STORE)
         form_layout.addWidget(self.preset_name_input)
         self.name_error_label = QLabel("")
         self.name_error_label.setObjectName("error_label")
@@ -1302,6 +1502,7 @@ class HomePage(BasePage):
         edit_btn.setToolTip("Preset bearbeiten")
         edit_btn.setMinimumWidth(110)
         edit_btn.setFixedHeight(40)
+        edit_btn.setStyleSheet(f"background-color: {EDIT_BUTTON_COLOR}; color: white;")
         edit_btn.clicked.connect(lambda idx=index: self.edit_preset(idx))
         btn_layout_h.addWidget(edit_btn)
 

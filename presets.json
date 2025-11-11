@@ -1,13 +1,8 @@
 [
   {
-    "name": "\u00fcbersetzten auf en",
-    "prompt": "\u00fcbersetzte auf en",
+    "name": "test",
+    "prompt": "\u00fcbersetze auf en",
     "api_type": "GPT-4",
-    "shortcut": "Alt+X"
-  },
-  {
-    "name": "dbd",
-    "prompt": "ergrewgergewrgewrg",
-    "api_type": "GPT-4"
+    "shortcut": "Shift+G"
   }
 ]
