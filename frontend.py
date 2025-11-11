@@ -1,17 +1,16 @@
 import sys
 import pyperclip
-from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QAction, QKeySequence, QPalette, QColor
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QLineEdit,
     QVBoxLayout, QHBoxLayout, QPushButton, QComboBox,
     QFrame, QScrollArea, QMessageBox, QStackedWidget,
-    QTextEdit, QDialog, QDialogButtonBox, QSplitter,
+    QTextEdit, QDialog, QSplitter,
 
-    QProgressBar, QSystemTrayIcon, QMenu, QStyle
+    QSystemTrayIcon, QMenu, QStyle
 )
 from backend import APIBackend
-import re
 
 
 # ===== HELPER FUNCTIONS (müssen vor den Klassen definiert sein) =====
@@ -30,7 +29,8 @@ def is_valid_shortcut(shortcut_str: str, platform: str = None) -> tuple:
     shortcut_str = shortcut_str.strip()
 
     # Erlaubte Modifier und Keys
-    valid_modifiers = {"Ctrl", "Shift", "Alt", "Cmd", "Meta"}
+    # Entferne 'Cmd' als erlaubte Eingabe (problematisch auf manchen Systemen)
+    valid_modifiers = {"Ctrl", "Control", "Shift", "Alt", "Option", "Meta", "AltGr"}
     valid_keys = {
         # Function keys
         "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
@@ -49,63 +49,95 @@ def is_valid_shortcut(shortcut_str: str, platform: str = None) -> tuple:
     # Parse shortcut
     parts = shortcut_str.split("+")
     if len(parts) < 2:
-        return False, "Shortcut benötigt mindestens einen Modifier (z.B. Ctrl+, Cmd+)"
+        return False, "Shortcut benötigt mindestens einen Modifier (z.B. Ctrl+T, Control+Alt+P)"
 
-    modifiers = parts[:-1]
+    modifiers = [m.strip() for m in parts[:-1]]
     key = parts[-1].strip()
 
     # Validiere Modifiers
     for mod in modifiers:
-        mod = mod.strip()
         if mod not in valid_modifiers:
-            return False, f"Ungültiger Modifier: '{mod}'. Erlaubt: Ctrl, Shift, Alt, Cmd"
+            allowed = ", ".join(sorted(valid_modifiers))
+            return False, f"Ungültiger Modifier: '{mod}'. Erlaubt: {allowed}"
 
     # Validiere Key
     if key not in valid_keys:
         return False, f"Ungültiger Key: '{key}'"
 
-    # Platform-spezifische Validierung
-    if platform == "darwin":  # macOS
-        has_cmd = any(m.strip() in ("Cmd", "Meta") for m in modifiers)
-        has_ctrl = any(m.strip() == "Ctrl" for m in modifiers)
-        has_alt = any(m.strip() == "Alt" for m in modifiers)
-
-        if has_ctrl and not has_cmd and len(modifiers) == 1:
-            return False, "Auf macOS: Verwende 'Cmd' statt 'Ctrl' (z.B. Cmd+G statt Ctrl+G)"
-
-        if has_alt and not (has_cmd or has_ctrl):
-            return False, "Auf macOS: Alt sollte mit Cmd oder Ctrl kombiniert werden"
-    else:  # Windows/Linux
-        has_cmd = any(m.strip() in ("Cmd", "Meta") for m in modifiers)
-        if has_cmd:
-            return False, "Auf Windows/Linux: Verwende 'Ctrl' statt 'Cmd' (z.B. Ctrl+G)"
+    # Grundlegende Plausibilitätschecks (plattformunabhängig, redundanz-safe)
+    if len(modifiers) == 1 and modifiers[0] in {"Alt", "Option"}:
+        # Option/Alt alleine ist oft nicht ideal — nur als Warnung (aber wir lassen es zu)
+        return True, ""
 
     return True, ""
 
 
 def normalize_shortcut_for_platform(shortcut_str: str, platform: str = None) -> str:
     """
-    Normalisiert einen Shortcut für die aktuelle Plattform.
+    Normalisiert einen Shortcut-String (benutzerfreundliche Synonyme) für Speicherung.
+    Ersetzt z.B. 'Control' -> 'Ctrl', 'Option' -> 'Alt' usw.
     """
     if platform is None:
         platform = sys.platform
 
-    shortcut_str = shortcut_str.strip()
+    s = shortcut_str.strip()
 
-    if platform == "darwin":  # macOS
-        if shortcut_str.startswith("Ctrl+") and len(shortcut_str.split("+")) == 2:
-            shortcut_str = shortcut_str.replace("Ctrl", "Cmd")
-    else:  # Windows/Linux
-        shortcut_str = shortcut_str.replace("Cmd", "Ctrl")
-        shortcut_str = shortcut_str.replace("Meta", "Ctrl")
+    # Vereinheitliche Synonyme
+    s = s.replace('Control', 'Ctrl')
+    s = s.replace('Option', 'Alt')
+    s = s.replace('AltGr', 'AltGr')
+    # Falls jemand noch 'Cmd' schreibt, wandeln wir es intern zu 'Meta' (aber 'Cmd' wird nicht in valid_modifiers angeboten)
+    s = s.replace('Cmd', 'Meta')
 
-    return shortcut_str
+    if platform != 'darwin':
+        # Auf Windows/Linux: Meta (wenn vorhanden) ist in der Regel Ctrl
+        s = s.replace('Meta', 'Ctrl')
+
+    return s
 
 
-# Platform-specific modifier key
+def canonicalize_shortcut_for_qt(shortcut_str: str, platform: str = None) -> str:
+    """
+    Erzeugt eine Qt-kompatible Shortcut-Notation aus einer vom Nutzer eingegebenen Shortcut-Notation.
+    - Normalisiert Synonyme (Control->Ctrl, Option->Alt)
+    - Auf macOS: lässt Meta als Meta (Qt erwartet 'Meta' für Command)
+    - Auf Windows/Linux: wandelt Meta -> Ctrl
+    """
+    if platform is None:
+        platform = sys.platform
+
+    parts = [p.strip() for p in shortcut_str.split('+') if p.strip()]
+    if not parts:
+        return shortcut_str
+
+    modifiers = parts[:-1]
+    key = parts[-1]
+
+    map_mod = {
+        'Control': 'Ctrl', 'Ctrl': 'Ctrl', 'Shift': 'Shift',
+        'Alt': 'Alt', 'Option': 'Alt', 'AltGr': 'AltGr',
+        'Meta': 'Meta', 'Cmd': 'Meta'
+    }
+
+    canonical_mods = []
+    for m in modifiers:
+        canonical_mods.append(map_mod.get(m, m))
+
+    # Plattform-spezifische Anpassungen
+    if platform == 'darwin':
+        # Auf macOS: Qt erwartet 'Meta' für Command und 'Alt' für Option. Wir belassen 'Meta' unverändert.
+        pass
+    else:
+        # Auf Windows/Linux: Meta -> Ctrl
+        canonical_mods = ['Ctrl' if m == 'Meta' else m for m in canonical_mods]
+
+    return "+".join(canonical_mods + [key])
+
+
+# Platform-specific modifier key (Anzeige / Tooltip)
 def get_modifier_key():
-    """Returns 'Cmd' for macOS, 'Ctrl' for Windows/Linux"""
-    return "Cmd" if sys.platform == "darwin" else "Ctrl"
+    """Returns 'Meta' for macOS, 'Ctrl' for Windows/Linux"""
+    return "Meta" if sys.platform == "darwin" else "Ctrl"
 
 MODIFIER_KEY = get_modifier_key()
 MODIFIER_KEY_DISPLAY = "⌘" if sys.platform == "darwin" else "Ctrl"
@@ -159,7 +191,7 @@ class EditPresetDialog(QDialog):
         self.api_type_combo.setMinimumHeight(40)
         if preset_data:
             api_type = preset_data.get("api_type", "ChatGPT")
-            index = self.api_type_combo.findText(api_type, Qt.MatchFixedString)
+            index = self.api_type_combo.findText(api_type)
             if index >= 0:
                 self.api_type_combo.setCurrentIndex(index)
         layout.addWidget(self.api_type_combo)
@@ -217,12 +249,16 @@ class ShortcutDialog(QDialog):
 
         self.shortcut_input = QLineEdit()
         self.shortcut_input.setText(current_shortcut)
-        self.shortcut_input.setPlaceholderText("z.B. Cmd+Shift+T" if sys.platform == "darwin" else "z.B. Ctrl+Shift+T")
+        # Avoid suggesting 'Cmd' as user input — suggest platform-agnostic names
+        if sys.platform == "darwin":
+            self.shortcut_input.setPlaceholderText("z.B. Control+Shift+T oder Option+Shift+T")
+        else:
+            self.shortcut_input.setPlaceholderText("z.B. Ctrl+Shift+T")
         layout.addWidget(self.shortcut_input)
 
         # Beispiele - plattformspezifisch
         if sys.platform == "darwin":
-            examples = QLabel("Beispiele: Cmd+Shift+S, Cmd+T, Cmd+Alt+P")
+            examples = QLabel("Beispiele: Control+Shift+S, Control+T, Option+Control+P")
         else:
             examples = QLabel("Beispiele: Ctrl+Shift+S, Ctrl+T, Ctrl+Alt+P")
         examples.setObjectName("hint_text")
@@ -396,7 +432,15 @@ class APIManager(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("PromptPilot")
-        self.setMinimumSize(1200, 700)
+        # Fenster auf feste Größe setzen (nicht veränderbar)
+        self.setFixedSize(1200, 700)
+
+        # Backend frühzeitig initialisieren, damit Einstellungen gelesen werden können
+        self.backend = APIBackend()
+        # Verwaltung von Shortcuts
+        self.preset_shortcuts = {}
+        self.preset_shortcut_actions = {}
+        self.visibility_action = None
 
         # Tray Icon Setup
         self.tray_icon = QSystemTrayIcon(self)
@@ -414,13 +458,11 @@ class APIManager(QMainWindow):
         self.tray_icon.setContextMenu(tray_menu)
         self.tray_icon.show()
 
-        # Erzwinge Dark Mode
-        self.force_dark_mode()
+        # Theme initialisieren (dark/light) aus Backend-Einstellungen
+        self.current_theme = self.backend.get_setting('theme', 'dark')
+        self.apply_stylesheets(self.current_theme)
 
-        self.backend = APIBackend()
         self.current_page_index = 0
-        self.preset_shortcuts = {}
-        self.preset_shortcut_actions = {}
 
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -453,9 +495,7 @@ class APIManager(QMainWindow):
         content_layout.addWidget(self.page_stack, 1)
         main_layout.addWidget(content_container, 1)
 
-        self.setup_shortcuts()
-        self.apply_stylesheets()
-
+        # Prepare toast UI early so load_saved_shortcuts can call show_toast safely
         self.toast_label = QLabel(self)
         self.toast_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.toast_label.setObjectName("toast")
@@ -463,29 +503,8 @@ class APIManager(QMainWindow):
         self.toast_timer = QTimer(self)
         self.toast_timer.timeout.connect(self.hide_toast)
 
-    def force_dark_mode(self):
-        """Erzwingt Dark Mode für die gesamte Anwendung"""
-        QApplication.setStyle("Fusion")
-
-        palette = QPalette()
-        palette.setColor(QPalette.ColorRole.Window, QColor(18, 18, 18))
-        palette.setColor(QPalette.ColorRole.WindowText, QColor(230, 230, 230))
-        palette.setColor(QPalette.ColorRole.Base, QColor(25, 25, 25))
-        palette.setColor(QPalette.ColorRole.AlternateBase, QColor(40, 40, 40))
-        palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(230, 230, 230))
-        palette.setColor(QPalette.ColorRole.ToolTipText, QColor(230, 230, 230))
-        palette.setColor(QPalette.ColorRole.Text, QColor(230, 230, 230))
-        palette.setColor(QPalette.ColorRole.Button, QColor(35, 35, 35))
-        palette.setColor(QPalette.ColorRole.ButtonText, QColor(230, 230, 230))
-        palette.setColor(QPalette.ColorRole.BrightText, QColor(255, 0, 0))
-        palette.setColor(QPalette.ColorRole.Link, QColor(88, 166, 255))
-        palette.setColor(QPalette.ColorRole.Highlight, QColor(88, 166, 255))
-        palette.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
-
-        app = QApplication.instance()
-        if app:
-            app.setPalette(palette)
-        self.setPalette(palette)
+        # Lade und registriere gespeicherte Preset-Shortcuts
+        self.load_saved_shortcuts()
 
     def create_top_nav(self):
         self.top_nav = QWidget()
@@ -518,6 +537,22 @@ class APIManager(QMainWindow):
         shortcuts_btn.setMinimumHeight(36)
         shortcuts_btn.clicked.connect(self.show_shortcuts_overview)
         layout.addWidget(shortcuts_btn)
+
+        # Sichtbarkeit-Shortcut Button (öffnet Dialog zum Setzen)
+        vis_btn = QPushButton("Visibility Shortcut")
+        vis_btn.setObjectName("btn_ghost")
+        vis_btn.setMinimumHeight(36)
+        vis_btn.setToolTip("Shortcut zum Anzeigen/Verstecken der App setzen")
+        vis_btn.clicked.connect(self.set_visibility_shortcut)
+        layout.addWidget(vis_btn)
+
+        # Theme-Umschalter
+        theme_btn = QPushButton("Theme")
+        theme_btn.setObjectName("btn_ghost")
+        theme_btn.setMinimumHeight(36)
+        theme_btn.setToolTip("Wechsle zwischen Dark und Light Mode")
+        theme_btn.clicked.connect(self.toggle_theme)
+        layout.addWidget(theme_btn)
 
     def create_sidebar(self):
         self.sidebar = QWidget()
@@ -596,19 +631,21 @@ class APIManager(QMainWindow):
         self.nav_credentials.style().polish(self.nav_credentials)
 
     def setup_shortcuts(self):
-        shortcut1 = QAction(self)
-        shortcut1.setShortcut(QKeySequence("Ctrl+1"))
-        shortcut1.triggered.connect(lambda: self.change_page(0))
-        self.addAction(shortcut1)
+        # Keine festen Navigation-Shortcuts mehr. Nutzer kann eigene Shortcuts
+        # für Presets und die Sichtbarkeit setzen.
+        return
 
-        shortcut2 = QAction(self)
-        shortcut2.setShortcut(QKeySequence("Ctrl+2"))
-        shortcut2.triggered.connect(lambda: self.change_page(1))
-        self.addAction(shortcut2)
+    def load_saved_shortcuts(self):
+        """Lädt beim Start alle in presets.json gespeicherten Shortcuts und registriert sie."""
+        for idx, preset in enumerate(self.backend.presets):
+            shortcut = preset.get('shortcut', '')
+            if shortcut:
+                self.register_preset_shortcut(shortcut, idx)
 
-    def show_shortcuts_overview(self):
-        dialog = ShortcutOverviewDialog(self, self.preset_shortcuts, self.backend.presets)
-        dialog.exec()
+        # Sichtbarkeits-Shortcut aus Einstellungen laden
+        vis = self.backend.get_setting('show_shortcut', '')
+        if vis:
+            self.register_visibility_shortcut(vis)
 
     def register_preset_shortcut(self, shortcut_key, preset_index):
         """Registriert einen Shortcut für ein Preset mit korrekter QKeySequence-Unterstützung"""
@@ -623,19 +660,16 @@ class APIManager(QMainWindow):
                     del self.preset_shortcut_actions[key]
                 del self.preset_shortcuts[key]
 
-        # Konvertiere für QKeySequence
-        # QKeySequence erkennt: Ctrl, Shift, Alt, Meta (=Cmd auf macOS)
-        qt_shortcut = shortcut_key
-
-        # Auf macOS: Cmd -> Meta für QKeySequence
-        if sys.platform == "darwin":
-            qt_shortcut = qt_shortcut.replace("Cmd", "Meta")
+        # Normalize and canonicalize for QKeySequence
+        normalized = normalize_shortcut_for_platform(shortcut_key)
+        qt_shortcut = canonicalize_shortcut_for_qt(normalized)
 
         print(f"[DEBUG] Registriere Shortcut: {shortcut_key} -> QKeySequence: {qt_shortcut}")
 
         # Erstelle die Action
         action = QAction(self)
         action.setShortcut(QKeySequence(qt_shortcut))
+        action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         action.triggered.connect(lambda idx=preset_index, key=shortcut_key: self.on_preset_shortcut_triggered(idx, key))
         self.addAction(action)
 
@@ -644,6 +678,68 @@ class APIManager(QMainWindow):
 
         print(f"[DEBUG] Shortcut registriert. Aktive Shortcuts: {self.preset_shortcuts}")
         self.show_toast(f"✓ Shortcut {shortcut_key} aktiviert")
+
+    def toggle_theme(self):
+        """Wechselt zwischen Dark und Light Mode und speichert die Einstellung"""
+        new_theme = 'light' if self.current_theme == 'dark' else 'dark'
+        self.current_theme = new_theme
+        # Persistiere Einstellung
+        try:
+            self.backend.set_setting('theme', new_theme)
+        except Exception:
+            pass
+        self.apply_stylesheets(new_theme)
+        self.show_toast(f"Theme: {new_theme}")
+
+    def set_visibility_shortcut(self):
+        """Zeigt Dialog zum Setzen eines Shortcuts um die App sichtbar/unsichtbar zu machen."""
+        dialog = ShortcutDialog(self, self.backend.get_setting('show_shortcut', ''))
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            shortcut = dialog.get_shortcut()
+            if shortcut:
+                if self.backend.set_setting('show_shortcut', shortcut):
+                    # (Re-)registriere Shortcut
+                    self.register_visibility_shortcut(shortcut)
+                    self.show_toast(f"Visibility Shortcut gesetzt: {shortcut}")
+                else:
+                    self.show_toast("Fehler beim Speichern des Shortcuts")
+
+    def register_visibility_shortcut(self, shortcut_key):
+        """Registriert den Shortcut, der die App zeigt/versteckt."""
+        # Entferne alte Aktion wenn vorhanden
+        if hasattr(self, 'visibility_action') and getattr(self, 'visibility_action'):
+            try:
+                self.removeAction(self.visibility_action)
+            except Exception:
+                pass
+
+        # Normalize and canonicalize for QKeySequence
+        normalized = normalize_shortcut_for_platform(shortcut_key)
+        qt_shortcut = canonicalize_shortcut_for_qt(normalized)
+
+        action = QAction(self)
+        action.setShortcut(QKeySequence(qt_shortcut))
+        action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        action.triggered.connect(self.toggle_visibility)
+        self.addAction(action)
+        self.visibility_action = action
+
+    def toggle_visibility(self):
+        """Zeigt/versteckt das Hauptfenster."""
+        if self.isVisible() and not self.isActiveWindow():
+            # Falls sichtbar aber nicht aktiv, bringe es nach vorne
+            self.show()
+            self.activateWindow()
+        elif self.isVisible():
+            self.hide()
+        else:
+            self.show()
+            self.activateWindow()
+
+    def show_shortcuts_overview(self):
+        dialog = ShortcutOverviewDialog(self, self.preset_shortcuts, self.backend.presets)
+        dialog.exec()
+
 
     def on_preset_shortcut_triggered(self, preset_index, shortcut_key):
         """Wird aufgerufen wenn ein Preset-Shortcut gedrückt wird"""
@@ -739,438 +835,129 @@ class APIManager(QMainWindow):
         self.toast_label.hide()
         self.toast_timer.stop()
 
-    def apply_stylesheets(self):
-        self.setStyleSheet("""
-            * {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-            }
-
-            QWidget {
-                font-size: 13px;
-                background-color: #121212;
-                color: #e6e6e6;
-            }
-
-            QMainWindow {
-                background-color: #121212;
-            }
-
-            #top_nav {
-                background-color: #1a1a1a;
-                border-bottom: 1px solid #333333;
-            }
-            
-            #top_nav_separator {
-                background-color: #333333;
-            }
-
-            #app_title {
-                color: #58a6ff;
-                letter-spacing: -0.5px;
-            }
-
-            #sidebar {
-                background-color: #161616;
-                border-right: 1px solid #333333;
-            }
-
-            #nav_label {
-                color: #8b8b8b;
-                letter-spacing: 0.5px;
-                font-size: 10px;
-            }
-
-            #sidebar_bottom {
-                background-color: #1a1a1a;
-                border-top: 1px solid #333333;
-            }
-
-            #sidebar_info {
-                color: #6c757d;
-            }
-
-            #sidebar_authors {
-                color: #4a4a4a;
-            }
-
-            #nav_button {
-                background-color: transparent;
-                color: #b0b0b0;
-                border: none;
-                border-left: 3px solid transparent;
-                border-radius: 6px;
-                text-align: left;
-                padding: 14px 16px;
-                font-weight: 500;
-                font-size: 14px;
-            }
-
-            #nav_button:hover {
-                background-color: #222222;
-                color: #e6e6e6;
-            }
-
-            #nav_button[active="true"] {
-                background-color: #1a3a52;
-                color: #58a6ff;
-                font-weight: 600;
-                border-left: 3px solid #58a6ff;
-            }
-
-            #page_stack {
-                background-color: #121212;
-            }
-
-            #content_card {
-                background-color: #1a1a1a;
-                border: 1px solid #333333;
-                border-radius: 12px;
-                padding: 24px;
-            }
-
-            #section_title {
-                font-size: 28px;
-                font-weight: 700;
-                color: #e6e6e6;
-                letter-spacing: -0.5px;
-                line-height: 1.2;
-            }
-
-            #section_subtitle {
-                font-size: 14px;
-                color: #8b8b8b;
-                line-height: 1.6;
-            }
-
-            #input_label {
-                font-weight: 500;
-                color: #d0d0d0;
-                font-size: 13px;
-                margin-bottom: 8px;
-            }
-
-            QLineEdit, QComboBox, QTextEdit {
-                background-color: #1e1e1e;
-                color: #e6e6e6;
-                border: 1px solid #3a3a3a;
-                border-radius: 8px;
-                padding: 12px 14px;
-                selection-background-color: #58a6ff;
-                font-size: 13px;
-                line-height: 1.6;
-            }
-
-            QLineEdit:focus, QComboBox:focus, QTextEdit:focus {
-                border: 2px solid #58a6ff;
-                padding: 11px 13px;
-                background-color: #222222;
-                outline: none;
-            }
-
-            QLineEdit[error="true"], QTextEdit[error="true"] {
-                border: 2px solid #f85149;
-                padding: 11px 13px;
-                background-color: #2a1a1a;
-            }
-
-            QComboBox::drop-down {
-                border: none;
-                width: 30px;
-            }
-
-            QComboBox::down-arrow {
-                image: none;
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-top: 6px solid #8b8b8b;
-                margin-right: 10px;
-            }
-
-            QComboBox QAbstractItemView {
-                background-color: #1e1e1e;
-                color: #e6e6e6;
-                border: 1px solid #3a3a3a;
-                border-radius: 8px;
-                selection-background-color: #58a6ff;
-                padding: 4px;
-            }
-
-            QPushButton {
-                background-color: #58a6ff;
-                color: #ffffff;
-                border: none;
-                border-radius: 8px;
-                padding: 11px 24px;
-                font-weight: 600;
-                font-size: 13px;
-            }
-
-            QPushButton:hover {
-                background-color: #4a95e8;
-            }
-
-            QPushButton:pressed {
-                background-color: #3a85d8;
-            }
-
-            QPushButton:focus {
-                outline: 2px solid #58a6ff;
-                outline-offset: 2px;
-            }
-
-            QPushButton#btn_primary {
-                background-color: #58a6ff;
-                min-width: 100px;
-            }
-
-            QPushButton#btn_primary:hover {
-                background-color: #4a95e8;
-            }
-
-            QPushButton#btn_success {
-                background-color: #3fb950;
-                min-width: 100px;
-            }
-
-            QPushButton#btn_success:hover {
-                background-color: #2ea043;
-            }
-
-            QPushButton#btn_danger {
-                background-color: #f85149;
-                padding: 9px 18px;
-            }
-
-            QPushButton#btn_danger:hover {
-                background-color: #da3633;
-            }
-
-            QPushButton#btn_warning {
-                background-color: #d29922;
-                color: #000;
-            }
-
-            QPushButton#btn_warning:hover {
-                background-color: #c08919;
-            }
-
-            QPushButton#btn_secondary {
-                background-color: #2a2a2a;
-                color: #e6e6e6;
-            }
-
-            QPushButton#btn_secondary:hover {
-                background-color: #3a3a3a;
-            }
-
-            QPushButton#btn_ghost {
-                background-color: transparent;
-                color: #8b8b8b;
-                border: 1px solid #3a3a3a;
-            }
-
-            QPushButton#btn_ghost:hover {
-                background-color: #1e1e1e;
-                color: #e6e6e6;
-                border-color: #58a6ff;
-            }
-
-            #preset_card {
-                background-color: #1a1a1a;
-                border: 1px solid #333333;
-                border-radius: 12px;
-                padding: 20px;
-                min-height: 120px;
-            }
-
-            #preset_card:hover {
-                border-color: #58a6ff;
-                background-color: #1e1e1e;
-            }
-
-            #preset_header {
-                font-weight: 600;
-                font-size: 16px;
-                color: #e6e6e6;
-                line-height: 1.4;
-            }
-
-            #preset_meta {
-                font-size: 12px;
-                color: #6c757d;
-            }
-
-            #preset_prompt {
-                font-size: 13px;
-                color: #8b8b8b;
-                line-height: 1.6;
-            }
-
-            #toast {
-                background-color: #1e1e1e;
-                color: #e6e6e6;
-                border-radius: 8px;
-                padding: 14px 24px;
-                border: 1px solid #3a3a3a;
-                font-size: 13px;
-                font-weight: 500;
-            }
-
-            #error_label {
-                color: #f85149;
-                font-size: 12px;
-                margin-top: 6px;
-                padding: 8px 12px;
-                background-color: rgba(248, 81, 73, 0.1);
-                border-radius: 6px;
-            }
-
-            #hint_text {
-                color: #8b8b8b;
-                font-size: 12px;
-                line-height: 1.5;
-            }
-
-            #loading_label {
-                color: #58a6ff;
-                font-size: 12px;
-            }
-
-            #empty_state {
-                color: #6c757d;
-                font-size: 14px;
-                padding: 80px 40px;
-                text-align: center;
-            }
-
-            #result_panel {
-                background-color: #1a1a1a;
-                border: 1px solid #333333;
-                border-radius: 12px;
-                padding: 20px;
-                min-height: 300px;
-            }
-
-            #result_panel QTextEdit {
-                font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-                font-size: 12px;
-                line-height: 1.6;
-            }
-
-            #shortcut_card {
-                background-color: #1a1a1a;
-                border: 1px solid #333333;
-                border-radius: 10px;
-            }
-
-            #shortcut_item {
-                background-color: transparent;
-                border-radius: 6px;
-            }
-
-            #shortcut_item:hover {
-                background-color: #1e1e1e;
-            }
-
-            #shortcut_key {
-                background-color: #2a2a2a;
-                color: #58a6ff;
-                padding: 6px 14px;
-                border-radius: 6px;
-                min-width: 100px;
-                font-weight: 600;
-            }
-
-            #shortcut_arrow {
-                color: #4a4a4a;
-                font-size: 16px;
-            }
-
-            #shortcut_desc {
-                color: #b0b0b0;
-                line-height: 1.5;
-            }
-
-            #card_title {
-                color: #e6e6e6;
-                margin-bottom: 8px;
-            }
-
-            #dialog_title {
-                color: #e6e6e6;
-            }
-
-            QProgressBar {
-                background-color: #2a2a2a;
-                border: none;
-                border-radius: 3px;
-                text-align: center;
-                height: 6px;
-            }
-
-            QProgressBar::chunk {
-                background-color: #58a6ff;
-                border-radius: 3px;
-            }
-
-            QScrollArea {
-                border: none;
-                background-color: transparent;
-            }
-
-            QScrollBar:vertical {
-                background-color: transparent;
-                width: 8px;
-                margin: 0px;
-            }
-
-            QScrollBar::handle:vertical {
-                background-color: #3a3a3a;
-                border-radius: 4px;
-                min-height: 30px;
-            }
-
-            QScrollBar::handle:vertical:hover {
-                background-color: #58a6ff;
-            }
-
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                height: 0px;
-            }
-
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
-                background: none;
-            }
-
-            QMessageBox {
-                background-color: #1a1a1a;
-            }
-
-            QMessageBox QLabel {
-                color: #e6e6e6;
-                font-size: 13px;
-                line-height: 1.6;
-            }
-
-            QMessageBox QPushButton {
-                min-width: 90px;
-                padding: 10px 20px;
-            }
-
-            QDialog {
-                background-color: #1a1a1a;
-                color: #e6e6e6;
-            }
-            
-            QSplitter::handle {
-                background-color: #2a2a2a;
-                width: 2px;
-            }
-            
-            QSplitter::handle:hover {
-                background-color: #58a6ff;
-            }
-        """)
+    def apply_stylesheets(self, theme='dark'):
+        """Wendet Stylesheet und Palette für das gewählte Theme an (dark/light)."""
+        # Farben definieren
+        accent = "#58a6ff"  # Primär-Akzent
+        success = "#3fb950"
+        danger = "#f85149"
+        warning = "#ffb86b"
+
+        QApplication.setStyle("Fusion")
+
+        if theme == 'dark':
+            palette = QPalette()
+            palette.setColor(QPalette.ColorRole.Window, QColor(18, 18, 18))
+            palette.setColor(QPalette.ColorRole.WindowText, QColor(230, 230, 230))
+            palette.setColor(QPalette.ColorRole.Base, QColor(25, 25, 25))
+            palette.setColor(QPalette.ColorRole.AlternateBase, QColor(35, 35, 35))
+            palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(230, 230, 230))
+            palette.setColor(QPalette.ColorRole.ToolTipText, QColor(230, 230, 230))
+            palette.setColor(QPalette.ColorRole.Text, QColor(230, 230, 230))
+            palette.setColor(QPalette.ColorRole.Button, QColor(36, 40, 44))
+            palette.setColor(QPalette.ColorRole.ButtonText, QColor(230, 230, 230))
+            palette.setColor(QPalette.ColorRole.BrightText, QColor(255, 0, 0))
+            palette.setColor(QPalette.ColorRole.Link, QColor(88, 166, 255))
+            palette.setColor(QPalette.ColorRole.Highlight, QColor(88, 166, 255))
+            palette.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
+            app = QApplication.instance()
+            if app:
+                app.setPalette(palette)
+            self.setPalette(palette)
+
+            # Modernes, farbiges Stylesheet für Dark Mode
+            base_styles = f"""
+                QWidget {{ background-color: #121212; color: #e6e6e6; }}
+                #top_nav {{ background-color: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.03); }}
+                #sidebar {{ background-color: #0f1720; }}
+                #sidebar_info, #sidebar_authors {{ color: #9aa6b2; }}
+                QPushButton#nav_button[active="true"] {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {accent}, stop:1 #2b6fbf); color: white; font-weight: 600; }}
+                QPushButton#nav_button {{ background: transparent; border: none; color: #cbd5e1; text-align: left; padding-left: 12px; }}
+                .content_card, .preset_card, .shortcut_card, #result_panel {{ background-color: #111316; border-radius: 12px; border: 1px solid rgba(255,255,255,0.03); }}
+                #page_stack {{ background: transparent; }}
+                /* Buttons */
+                QPushButton#btn_primary {{ background: {accent}; color: white; border-radius: 10px; padding: 10px 14px; }}
+                QPushButton#btn_primary:hover {{ background: #3f8fe6; }}
+                QPushButton#btn_secondary {{ background: rgba(255,255,255,0.03); color: #e6e6e6; border-radius: 10px; padding: 8px 12px; }}
+                QPushButton#btn_secondary:hover {{ background: rgba(255,255,255,0.06); }}
+                QPushButton#btn_success {{ background: {success}; color: white; border-radius: 10px; padding: 8px 12px; }}
+                QPushButton#btn_danger {{ background: {danger}; color: white; border-radius: 10px; padding: 8px 12px; }}
+                QPushButton#btn_warning {{ background: {warning}; color: #1f1f1f; border-radius: 10px; padding: 8px 12px; }}
+                QPushButton#btn_ghost {{ background: transparent; color: #9fb3ff; border-radius: 10px; padding: 8px 12px; }}
+                QPushButton#btn_ghost:hover {{ background: rgba(88,166,255,0.06); }}
+                /* Inputs */
+                QLineEdit, QTextEdit, QComboBox {{ background: #0b0d0f; border: 1px solid rgba(255,255,255,0.04); color: #e6e6e6; }}
+                QLineEdit[error="true"], QTextEdit[error="true"] {{ border: 1px solid {danger}; }}
+                /* Cards */
+                .preset_card {{ padding: 14px; }}
+                .section_title {{ color: #e6eefb; }}
+                QLabel#preset_meta {{ color: #9aa6b2; font-size: 12px; }}
+                /* Toast */
+                QLabel#toast {{ background: rgba(0,0,0,0.7); color: white; padding: 8px 14px; border-radius: 10px; }}
+            """
+        else:
+            palette = QPalette()
+            palette.setColor(QPalette.ColorRole.Window, QColor(250, 250, 250))
+            palette.setColor(QPalette.ColorRole.WindowText, QColor(20, 20, 20))
+            palette.setColor(QPalette.ColorRole.Base, QColor(245, 245, 245))
+            palette.setColor(QPalette.ColorRole.AlternateBase, QColor(235, 235, 235))
+            palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(20, 20, 20))
+            palette.setColor(QPalette.ColorRole.ToolTipText, QColor(20, 20, 20))
+            palette.setColor(QPalette.ColorRole.Text, QColor(20, 20, 20))
+            palette.setColor(QPalette.ColorRole.Button, QColor(240, 240, 240))
+            palette.setColor(QPalette.ColorRole.ButtonText, QColor(20, 20, 20))
+            palette.setColor(QPalette.ColorRole.BrightText, QColor(255, 0, 0))
+            palette.setColor(QPalette.ColorRole.Link, QColor(8, 88, 166))
+            palette.setColor(QPalette.ColorRole.Highlight, QColor(8, 88, 166))
+            palette.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
+            app = QApplication.instance()
+            if app:
+                app.setPalette(palette)
+            self.setPalette(palette)
+
+            base_styles = f"""
+                QWidget {{ background-color: #ffffff; color: #111827; }}
+                #top_nav {{ background-color: rgba(0,0,0,0.02); border-bottom: 1px solid rgba(16,24,40,0.04); }}
+                #sidebar {{ background-color: #f7fafc; }}
+                #sidebar_info, #sidebar_authors {{ color: #6b7280; }}
+                QPushButton#nav_button[active="true"] {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {accent}, stop:1 #2b6fbf); color: white; font-weight: 600; }}
+                QPushButton#nav_button {{ background: transparent; border: none; color: #0f172a; text-align: left; padding-left: 12px; }}
+                .content_card, .preset_card, .shortcut_card, #result_panel {{ background-color: #ffffff; border-radius: 12px; border: 1px solid rgba(15,23,42,0.04); box-shadow: 0 6px 18px rgba(15,23,42,0.04); }}
+                /* Buttons */
+                QPushButton#btn_primary {{ background: {accent}; color: white; border-radius: 10px; padding: 10px 14px; }}
+                QPushButton#btn_primary:hover {{ background: #3f8fe6; }}
+                QPushButton#btn_secondary {{ background: rgba(15,23,42,0.04); color: #0f172a; border-radius: 10px; padding: 8px 12px; }}
+                QPushButton#btn_secondary:hover {{ background: rgba(15,23,42,0.06); }}
+                QPushButton#btn_success {{ background: {success}; color: white; border-radius: 10px; padding: 8px 12px; }}
+                QPushButton#btn_danger {{ background: {danger}; color: white; border-radius: 10px; padding: 8px 12px; }}
+                QPushButton#btn_warning {{ background: {warning}; color: #1f1f1f; border-radius: 10px; padding: 8px 12px; }}
+                QPushButton#btn_ghost {{ background: transparent; color: {accent}; border-radius: 10px; padding: 8px 12px; }}
+                QPushButton#btn_ghost:hover {{ background: rgba(88,166,255,0.06); }}
+                /* Inputs */
+                QLineEdit, QTextEdit, QComboBox {{ background: #ffffff; border: 1px solid rgba(15,23,42,0.06); color: #0f172a; }}
+                QLineEdit[error="true"], QTextEdit[error="true"] {{ border: 1px solid {danger}; }}
+                /* Cards */
+                .preset_card {{ padding: 14px; }}
+                .section_title {{ color: #0f172a; }}
+                QLabel#preset_meta {{ color: #6b7280; font-size: 12px; }}
+                /* Toast */
+                QLabel#toast {{ background: rgba(16,24,40,0.9); color: white; padding: 8px 14px; border-radius: 10px; }}
+            """
+
+        # Gemeinsames Stylesheet-Grundgerüst (Schriftfamilie, allgemeine Rundungen)
+        common = """
+            * { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; }
+            QLineEdit, QComboBox, QTextEdit { border-radius: 8px; padding: 10px; }
+            QPushButton { border-radius: 8px; padding: 8px 14px; }
+            QLabel#section_subtitle { color: rgba(100,116,139,0.9); }
+        """
+
+        # Anwenden
+        try:
+            self.setStyleSheet(base_styles + common)
+        except Exception:
+            # Fallback: Mindestens common anwenden
+            self.setStyleSheet(common)
 
     @property
     def api_credentials(self):
@@ -1191,12 +978,14 @@ class BasePage(QWidget):
 
 
 class HomePage(BasePage):
+    """Aufgeräumte HomePage: Liste, Suche, Form zum Erstellen, Result-Panel."""
+
     def __init__(self, parent):
         super().__init__(parent)
 
         self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        # LEFT SIDE
+        # LEFT: Preset-Liste + Suche
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(0, 0, 0, 0)
@@ -1204,161 +993,129 @@ class HomePage(BasePage):
 
         header_layout = QVBoxLayout()
         header_layout.setSpacing(8)
-
         title = QLabel("Meine Presets")
         title.setObjectName("section_title")
         title.setFont(QFont("SF Pro Display", 28, QFont.Weight.Bold))
         header_layout.addWidget(title)
-
         subtitle = QLabel("Erstelle, verwalte und nutze deine API-Prompts")
         subtitle.setObjectName("section_subtitle")
         subtitle.setFont(QFont("SF Pro Display", 14))
         header_layout.addWidget(subtitle)
-
         left_layout.addLayout(header_layout)
 
-        # Search
+        # Suche
         search_card = QWidget()
         search_card.setObjectName("content_card")
         search_layout = QVBoxLayout(search_card)
         search_layout.setSpacing(10)
-
         search_label = QLabel("Suche")
         search_label.setObjectName("input_label")
         search_layout.addWidget(search_label)
-
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Nach Name oder Prompt suchen...")
         self.search_input.textChanged.connect(self.filter_presets)
         search_layout.addWidget(self.search_input)
         left_layout.addWidget(search_card)
 
-        # Presets List
+        # Preset-Liste
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setObjectName("scroll_area")
-
         self.presets_container = QWidget()
         self.presets_layout = QVBoxLayout(self.presets_container)
         self.presets_layout.setSpacing(16)
         self.presets_layout.setContentsMargins(0, 0, 10, 0)
-
         scroll.setWidget(self.presets_container)
         left_layout.addWidget(scroll, 1)
-
         self.main_splitter.addWidget(left_widget)
 
-        # RIGHT SIDE
+        # RIGHT: Form + Result
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(20)
 
-        # CREATE FORM
+        # Form zum Erstellen
         form_card = QWidget()
         form_card.setObjectName("content_card")
         form_layout = QVBoxLayout(form_card)
         form_layout.setSpacing(18)
-
         form_title = QLabel("Neues Preset erstellen")
         form_title.setObjectName("section_title")
         form_title.setFont(QFont("SF Pro Display", 18, QFont.Weight.Bold))
         form_layout.addWidget(form_title)
 
-        # Name
         name_label = QLabel("Preset-Name")
         name_label.setObjectName("input_label")
         form_layout.addWidget(name_label)
-
         self.preset_name_input = QLineEdit()
         self.preset_name_input.setPlaceholderText("z.B. Text Zusammenfassung")
         self.preset_name_input.textChanged.connect(self.validate_form)
         form_layout.addWidget(self.preset_name_input)
-
         self.name_error_label = QLabel("")
         self.name_error_label.setObjectName("error_label")
         self.name_error_label.hide()
         form_layout.addWidget(self.name_error_label)
 
-        # Prompt
         prompt_label = QLabel("Prompt-Text")
         prompt_label.setObjectName("input_label")
         form_layout.addWidget(prompt_label)
-
         self.preset_prompt_input = QTextEdit()
         self.preset_prompt_input.setPlaceholderText("Schreibe deinen Prompt hier...")
         self.preset_prompt_input.setAcceptRichText(False)
         self.preset_prompt_input.setFixedHeight(120)
         self.preset_prompt_input.textChanged.connect(self.validate_form)
         form_layout.addWidget(self.preset_prompt_input)
-
         self.prompt_error_label = QLabel("")
         self.prompt_error_label.setObjectName("error_label")
         self.prompt_error_label.hide()
         form_layout.addWidget(self.prompt_error_label)
 
-        # API Type
         api_label = QLabel("API-Typ")
         api_label.setObjectName("input_label")
         form_layout.addWidget(api_label)
-
         self.api_type_combo = QComboBox()
         self.api_type_combo.addItems(["ChatGPT", "GPT-4", "GPT-3.5-Turbo"])
         form_layout.addWidget(self.api_type_combo)
 
-        form_layout.addSpacing(12)
-
-        # BUTTONS
         btn_layout = QHBoxLayout()
-
         reset_btn = QPushButton("Zurücksetzen")
         reset_btn.setObjectName("btn_secondary")
         reset_btn.setFixedHeight(44)
         reset_btn.clicked.connect(self.clear_form)
         btn_layout.addWidget(reset_btn)
-
         save_btn = QPushButton("Preset Speichern")
         save_btn.setObjectName("btn_success")
         save_btn.setFixedHeight(44)
         save_btn.setFont(QFont("SF Pro Display", 14, QFont.Weight.Bold))
         save_btn.clicked.connect(self.save_new_preset)
         btn_layout.addWidget(save_btn, 1)
-
         form_layout.addLayout(btn_layout)
-
         right_layout.addWidget(form_card)
 
-        # RESULT PANEL
+        # Result-Panel
         self.result_card = QWidget()
         self.result_card.setObjectName("result_panel")
         result_layout = QVBoxLayout(self.result_card)
         result_layout.setSpacing(14)
-
         result_header = QLabel("Ergebnis")
         result_header.setObjectName("section_title")
         result_header.setFont(QFont("SF Pro Display", 16, QFont.Weight.Bold))
         result_layout.addWidget(result_header)
-
         self.result_content = QTextEdit()
         self.result_content.setReadOnly(True)
         self.result_content.setPlaceholderText("Das Ergebnis der API-Anfrage wird hier angezeigt...")
         result_layout.addWidget(self.result_content, 1)
-
         result_btn_layout = QHBoxLayout()
-
         clear_result_btn = QPushButton("Löschen")
         clear_result_btn.setObjectName("btn_secondary")
         clear_result_btn.clicked.connect(self.clear_result)
         result_btn_layout.addWidget(clear_result_btn)
-
         copy_btn = QPushButton("In Zwischenablage kopieren")
         copy_btn.setObjectName("btn_primary")
         copy_btn.clicked.connect(self.copy_result)
         result_btn_layout.addWidget(copy_btn, 1)
-
         result_layout.addLayout(result_btn_layout)
-
         self.result_card.hide()
         right_layout.addWidget(self.result_card, 1)
 
@@ -1366,17 +1123,16 @@ class HomePage(BasePage):
         self.main_splitter.setStretchFactor(0, 6)
         self.main_splitter.setStretchFactor(1, 4)
         self.main_splitter.setSizes([700, 500])
-
         self.main_layout.addWidget(self.main_splitter)
 
         self.current_search = ""
         self.update_presets_list()
 
+    # --- Formular-Validierung ---
     def validate_form(self):
         name = self.preset_name_input.text().strip()
         prompt = self.preset_prompt_input.toPlainText().strip()
 
-        # Name validieren
         if not name:
             self.name_error_label.setText("Name ist erforderlich")
             self.name_error_label.show()
@@ -1385,15 +1141,10 @@ class HomePage(BasePage):
             self.name_error_label.setText("Name muss mindestens 3 Zeichen haben")
             self.name_error_label.show()
             self.preset_name_input.setProperty("error", True)
-        elif any(p["name"] == name for p in self.controller.presets):
-            self.name_error_label.setText("Preset mit diesem Namen existiert bereits")
-            self.name_error_label.show()
-            self.preset_name_input.setProperty("error", True)
         else:
             self.name_error_label.hide()
             self.preset_name_input.setProperty("error", False)
 
-        # Prompt validieren
         if not prompt:
             self.prompt_error_label.setText("Prompt ist erforderlich")
             self.prompt_error_label.show()
@@ -1406,21 +1157,19 @@ class HomePage(BasePage):
             self.prompt_error_label.hide()
             self.preset_prompt_input.setProperty("error", False)
 
-        # Style aktualisieren
         self.preset_name_input.style().unpolish(self.preset_name_input)
         self.preset_name_input.style().polish(self.preset_name_input)
         self.preset_prompt_input.style().unpolish(self.preset_prompt_input)
         self.preset_prompt_input.style().polish(self.preset_prompt_input)
 
+    # --- Preset Verarbeitung / UI ---
     def show_loading(self):
         self.result_card.show()
         self.result_content.setPlainText("Verarbeite Anfrage...\n\nBitte warten...")
 
     def show_result(self, preset_name, input_text, result):
         self.result_card.show()
-        output = f"PRESET\n{preset_name}\n\n"
-        output += f"EINGABE\n{input_text}\n\n"
-        output += f"ERGEBNIS\n{result}"
+        output = f"PRESET\n{preset_name}\n\nEINGABE\n{input_text}\n\nERGEBNIS\n{result}"
         self.result_content.setPlainText(output)
 
     def show_error(self, error_msg):
@@ -1431,20 +1180,23 @@ class HomePage(BasePage):
         text = self.result_content.toPlainText()
         if text:
             pyperclip.copy(text)
-            self.controller.show_toast("In Zwischenablage kopiert")
+            if hasattr(self.controller, 'show_toast'):
+                self.controller.show_toast("In Zwischenablage kopiert")
 
     def clear_result(self):
         self.result_content.clear()
         self.result_card.hide()
 
+    # --- Preset-Liste ---
     def update_presets_list(self):
+        # Alle Widgets entfernen
         for i in reversed(range(self.presets_layout.count())):
             w = self.presets_layout.itemAt(i).widget()
             if w:
                 w.deleteLater()
 
         presets = self.controller.presets
-        filtered = [p for p in presets if not self.current_search or
+        filtered = [(i, p) for i, p in enumerate(presets) if not self.current_search or
                     self.current_search.lower() in p["name"].lower() or
                     self.current_search.lower() in p["prompt"].lower()]
 
@@ -1454,26 +1206,57 @@ class HomePage(BasePage):
             empty_layout = QVBoxLayout(empty)
             empty_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             empty_layout.setSpacing(16)
-
             empty_title = QLabel("Keine Presets gefunden")
             empty_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
             empty_title.setFont(QFont("SF Pro Display", 18, QFont.Weight.Bold))
             empty_title.setStyleSheet("color: #6c757d;")
             empty_layout.addWidget(empty_title)
-
             empty_text = QLabel("Erstelle dein erstes Preset mit dem Formular")
             empty_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
             empty_text.setObjectName("section_subtitle")
             empty_layout.addWidget(empty_text)
-
             self.presets_layout.addWidget(empty)
             self.presets_layout.addStretch()
             return
 
-        for idx, preset in enumerate(filtered):
+        for idx, preset in filtered:
             self.presets_layout.addWidget(self.create_preset_widget(idx, preset))
 
         self.presets_layout.addStretch()
+
+    def filter_presets(self, text: str):
+        """Filtert die Preset-Liste basierend auf der Sucheingabe."""
+        self.current_search = text.strip()
+        self.update_presets_list()
+
+    def save_new_preset(self):
+        """Speichert ein neues Preset über das Backend nach Validierung."""
+        name = self.preset_name_input.text().strip()
+        prompt = self.preset_prompt_input.toPlainText().strip()
+        api_type = self.api_type_combo.currentText()
+
+        if not name:
+            if hasattr(self.controller, 'show_toast'):
+                self.controller.show_toast("Name ist erforderlich")
+            return
+        if len(name) < 3:
+            if hasattr(self.controller, 'show_toast'):
+                self.controller.show_toast("Name zu kurz")
+            return
+        if not prompt or len(prompt) < 10:
+            if hasattr(self.controller, 'show_toast'):
+                self.controller.show_toast("Prompt zu kurz")
+            return
+
+        success = self.controller.backend.save_preset(name, prompt, api_type)
+        if success:
+            if hasattr(self.controller, 'show_toast'):
+                self.controller.show_toast(f"Preset '{name}' gespeichert")
+            self.clear_form()
+            self.update_presets_list()
+        else:
+            if hasattr(self.controller, 'show_toast'):
+                self.controller.show_toast("Fehler: Preset konnte nicht gespeichert werden (evtl. Name bereits vorhanden)")
 
     def create_preset_widget(self, index, preset):
         card = QWidget()
@@ -1491,15 +1274,12 @@ class HomePage(BasePage):
         title_layout = QVBoxLayout(title_box)
         title_layout.setContentsMargins(0, 0, 0, 0)
         title_layout.setSpacing(6)
-
         title = QLabel(preset["name"])
         title.setObjectName("preset_header")
         title_layout.addWidget(title)
-
         meta = QLabel(f"API: {preset['api_type']}")
         meta.setObjectName("preset_meta")
         title_layout.addWidget(meta)
-
         header_layout.addWidget(title_box, 1)
 
         btn_box = QWidget()
@@ -1513,7 +1293,7 @@ class HomePage(BasePage):
         shortcut_btn.setToolTip("Tastenkombination festlegen")
         shortcut_btn.setMinimumWidth(100)
         shortcut_btn.setFixedHeight(40)
-        shortcut_btn.clicked.connect(lambda: self.set_shortcut(index))
+        shortcut_btn.clicked.connect(lambda idx=index: self.set_shortcut(idx))
         btn_layout_h.addWidget(shortcut_btn)
 
         # Edit Button
@@ -1522,7 +1302,7 @@ class HomePage(BasePage):
         edit_btn.setToolTip("Preset bearbeiten")
         edit_btn.setMinimumWidth(110)
         edit_btn.setFixedHeight(40)
-        edit_btn.clicked.connect(lambda: self.edit_preset(index))
+        edit_btn.clicked.connect(lambda idx=index: self.edit_preset(idx))
         btn_layout_h.addWidget(edit_btn)
 
         # Execute Button
@@ -1531,7 +1311,7 @@ class HomePage(BasePage):
         use_btn.setMinimumWidth(120)
         use_btn.setFixedHeight(40)
         use_btn.setToolTip("Preset mit Zwischenablage ausführen")
-        use_btn.clicked.connect(lambda: self.controller.execute_preset_by_index(index))
+        use_btn.clicked.connect(lambda idx=index: self.controller.execute_preset_by_index(idx))
         btn_layout_h.addWidget(use_btn)
 
         # Delete Button
@@ -1540,7 +1320,7 @@ class HomePage(BasePage):
         delete_btn.setMinimumWidth(95)
         delete_btn.setFixedHeight(40)
         delete_btn.setToolTip("Preset entfernen")
-        delete_btn.clicked.connect(lambda: self.delete_preset(index))
+        delete_btn.clicked.connect(lambda idx=index: self.delete_preset(idx))
         btn_layout_h.addWidget(delete_btn)
 
         header_layout.addWidget(btn_box)
@@ -1562,76 +1342,48 @@ class HomePage(BasePage):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             shortcut = dialog.get_shortcut()
             if shortcut:
-                self.controller.register_preset_shortcut(shortcut, index)
+                # Persistiere Shortcut im Backend und registriere danach
+                if self.controller.backend.save_preset_shortcut(index, shortcut):
+                    # Registrierung im Controller
+                    if hasattr(self.controller, 'register_preset_shortcut'):
+                        self.controller.register_preset_shortcut(shortcut, index)
+                else:
+                    if hasattr(self.controller, 'show_toast'):
+                        self.controller.show_toast("Fehler beim Speichern des Shortcuts")
 
     def edit_preset(self, index):
         if 0 <= index < len(self.controller.presets):
             preset = self.controller.presets[index]
             dialog = EditPresetDialog(self, preset)
-
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 data = dialog.get_data()
-
                 if not data["name"] or not data["prompt"]:
-                    self.controller.show_toast("Name und Prompt erforderlich")
+                    if hasattr(self.controller, 'show_toast'):
+                        self.controller.show_toast("Name und Prompt erforderlich")
                     return
-
-                if self.controller.backend.update_preset_by_index(
-                        index, data["name"], data["prompt"], data["api_type"]
-                ):
-                    self.controller.show_toast(f"Preset '{data['name']}' aktualisiert")
+                if self.controller.backend.update_preset_by_index(index, data["name"], data["prompt"], data["api_type"]):
+                    if hasattr(self.controller, 'show_toast'):
+                        self.controller.show_toast(f"Preset '{data['name']}' aktualisiert")
                     self.update_presets_list()
                 else:
-                    self.controller.show_toast("Fehler beim Aktualisieren")
-
-    def filter_presets(self):
-        self.current_search = self.search_input.text().strip()
-        self.update_presets_list()
-
-    def save_new_preset(self):
-        name = self.preset_name_input.text().strip()
-        prompt = self.preset_prompt_input.toPlainText().strip()
-        api_type = self.api_type_combo.currentText()
-
-        if not name or not prompt:
-            self.controller.show_toast("Name und Prompt erforderlich")
-            self.validate_form()
-            return
-
-        if len(name) < 3:
-            self.controller.show_toast("Name muss mindestens 3 Zeichen haben")
-            self.validate_form()
-            return
-
-        if len(prompt) < 10:
-            self.controller.show_toast("Prompt sollte mindestens 10 Zeichen haben")
-            self.validate_form()
-            return
-
-        if self.controller.backend.save_preset(name, prompt, api_type):
-            self.controller.show_toast(f"Preset '{name}' gespeichert")
-            self.update_presets_list()
-            self.clear_form()
-        else:
-            self.controller.show_toast("Preset existiert bereits")
-            self.validate_form()
+                    if hasattr(self.controller, 'show_toast'):
+                        self.controller.show_toast("Fehler beim Aktualisieren")
 
     def delete_preset(self, index):
         if 0 <= index < len(self.controller.presets):
             p = self.controller.presets[index]
-            reply = QMessageBox.question(
-                self,
-                "Preset löschen",
-                f"Möchtest du das Preset '{p['name']}' wirklich löschen?\n\nDiese Aktion kann nicht rückgängig gemacht werden.",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
-            )
+            reply = QMessageBox.question(self, "Preset löschen",
+                                         f"Möchtest du das Preset '{p['name']}' wirklich löschen?\n\nDiese Aktion kann nicht rückgängig gemacht werden.",
+                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                         QMessageBox.StandardButton.No)
             if reply == QMessageBox.StandardButton.Yes:
                 if self.controller.backend.delete_preset_by_index(index):
-                    self.controller.show_toast(f"'{p['name']}' gelöscht")
+                    if hasattr(self.controller, 'show_toast'):
+                        self.controller.show_toast(f"'{p['name']}' gelöscht")
                     self.update_presets_list()
                 else:
-                    self.controller.show_toast("Fehler beim Löschen")
+                    if hasattr(self.controller, 'show_toast'):
+                        self.controller.show_toast("Fehler beim Löschen")
 
     def clear_form(self):
         self.preset_name_input.clear()

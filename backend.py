@@ -29,6 +29,13 @@ class PromptPilotBackend:
             with open(self.credentials_file, 'w') as f:
                 json.dump([], f, indent=2)
 
+        # Einstellungen-Datei (z.B. Theme, Show-Shortcut) initialisieren
+        self.settings_file = "settings.json"
+        if not os.path.exists(self.settings_file):
+            default_settings = {"theme": "dark", "show_shortcut": ""}
+            with open(self.settings_file, 'w') as f:
+                json.dump(default_settings, f, indent=2)
+
     def _init_client(self, api_type: str) -> bool:
         try:
             with open(self.credentials_file, 'r') as f:
@@ -74,6 +81,24 @@ class PromptPilotBackend:
             with open(self.preset_file, 'w') as f:
                 json.dump(presets, f, indent=2)
             return True
+        except Exception:
+            return False
+
+    def save_preset_shortcut(self, index: int, shortcut: str) -> bool:
+        """Speichert eine Tastenkombination für ein Preset (persistiert in presets.json).
+
+        Rückgabe: True bei Erfolg, False bei Fehler oder ungültigem Index.
+        """
+        try:
+            with open(self.preset_file, 'r') as f:
+                presets = json.load(f)
+
+            if 0 <= index < len(presets):
+                presets[index]["shortcut"] = shortcut
+                with open(self.preset_file, 'w') as f:
+                    json.dump(presets, f, indent=2)
+                return True
+            return False
         except Exception:
             return False
 
@@ -178,9 +203,38 @@ class PromptPilotBackend:
         except Exception:
             return []
 
+    # Einstellungen (Theme, Show-Shortcut etc.)
+    def _load_settings(self) -> Dict:
+        """Lädt die Einstellungen aus settings.json"""
+        try:
+            with open(self.settings_file, 'r') as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+    def _save_settings(self, settings: Dict) -> bool:
+        """Speichert die Einstellungen in settings.json"""
+        try:
+            with open(self.settings_file, 'w') as f:
+                json.dump(settings, f, indent=2)
+            return True
+        except Exception:
+            return False
+
+    def get_setting(self, key: str, default=None):
+        """Gibt einen Einstellungswert zurück"""
+        s = self._load_settings()
+        return s.get(key, default)
+
+    def set_setting(self, key: str, value) -> bool:
+        """Setzt und persistiert einen Einstellungswert"""
+        s = self._load_settings()
+        s[key] = value
+        return self._save_settings(s)
+
     @property
     def api_credentials(self) -> Dict:
-        """Gibt Credentials als Dictionary zurück - für Frontend-Kompatibilität"""
+        """Gibt Credentials als Dictionary zur��ck - für Frontend-Kompatibilität"""
         creds = self.get_credentials()
         result = {}
         for cred in creds:
