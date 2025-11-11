@@ -94,7 +94,10 @@ class PromptPilotBackend:
                 presets = json.load(f)
 
             if 0 <= index < len(presets):
-                presets[index]["shortcut"] = shortcut
+                if shortcut:
+                    presets[index]["shortcut"] = shortcut
+                else:
+                    presets[index].pop("shortcut", None)
                 with open(self.preset_file, 'w') as f:
                     json.dump(presets, f, indent=2)
                 return True
