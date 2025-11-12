@@ -19,7 +19,7 @@ PromptPilot automatisiert repetitive Aufgaben mit Large Language Models (LLMs). 
 ✅ **Modernes Dark-Theme** - Benutzerfreundliche grafische Oberfläche  
 ✅ **Lokale Datenspeicherung** - Alle Daten bleiben auf deinem Computer  
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Installation
 
@@ -51,15 +51,15 @@ source venv/bin/activate
 python3 frontend.py
 ```
 
-## 📖 Verwendung
+## Verwendung
 
 ### 1. API-Key konfigurieren
 
 1. Starte die Anwendung
 2. Navigiere zu **"API Einstellungen"** (oder drücke `Ctrl+2`)
 3. Gib deinen OpenAI API-Key ein (erhältlich auf [platform.openai.com](https://platform.openai.com/api-keys))
-4. Klicke auf **"🧪 Verbindung testen"**
-5. Klicke auf **"💾 Speichern"**
+4. Klicke auf **"Verbindung testen"**
+5. Klicke auf **"Speichern"**
 
 ### 2. Preset erstellen
 
@@ -68,11 +68,11 @@ python3 frontend.py
    - **Name**: z.B. "Rechtschreibung korrigieren"
    - **Prompt**: z.B. "Korrigiere folgenden Text auf Rechtschreibung und Grammatik:"
    - **API-Typ**: Wähle "ChatGPT" oder "GPT-4"
-3. Klicke auf **"💾 Preset Speichern"**
+3. Klicke auf **"Preset Speichern"**
 
 ### 3. Keyboard-Shortcut einrichten
 
-1. Klicke auf den **⌨️ Button** bei deinem Preset
+1. Klicke auf den **Button** bei deinem Preset
 2. Gib eine Tastenkombination ein, z.B. `Ctrl+Shift+R`
 3. Klicke **OK**
 
@@ -87,7 +87,7 @@ python3 frontend.py
 
 **Mit Button:**
 1. Kopiere Text in die Zwischenablage
-2. Klicke auf **"▶️ Ausführen"** bei deinem Preset
+2. Klicke auf **"Ausführen"** bei deinem Preset
 3. Das Ergebnis wird angezeigt und ist in der Zwischenablage
 
 ## ⌨️ Tastenkombinationen
@@ -98,7 +98,7 @@ python3 frontend.py
 | `Ctrl+2` | Zur API Einstellungen-Seite wechseln |
 | _Benutzerdefiniert_ | Preset ausführen (selbst festgelegt) |
 
-## 📁 Projektstruktur
+## Projektstruktur
 
 ```
 PromptPilot/
@@ -121,14 +121,14 @@ PromptPilot/
 - **OpenAI API** - LLM-Integration (ChatGPT, GPT-4)
 - **PyperClip** - Zwischenablage-Integration
 
-## 💾 Datenverwaltung
+## Datenverwaltung
 
 Alle Daten werden lokal in JSON-Dateien gespeichert:
 
 - **`presets.json`** - Deine Preset-Vorlagen
 - **`credentials.json`** - Deine API-Keys (vertraulich!)
 
-⚠️ **Sicherheitshinweis**: Teile die `credentials.json` niemals öffentlich!
+**Sicherheitshinweis**: Teile die `credentials.json` niemals öffentlich!
 
 ## 🐛 Problembehandlung
 
@@ -166,7 +166,7 @@ source venv/bin/activate
 python3 -c "import PySide6; import openai; import pyperclip; print('✓ Alle OK')"
 ```
 
-## 📊 Backend-Tests
+## Backend-Tests
 
 Um das Backend direkt zu testen:
 
@@ -216,7 +216,7 @@ Das führt automatische Tests aus und zeigt ob alles funktioniert.
    - Drücke `Ctrl+Shift+S`
    - Erhalte Zusammenfassung
 
-## ⚠️ Wichtige Hinweise
+## Wichtige Hinweise
 
 ### Kosten
 
@@ -236,23 +236,23 @@ OpenAI API-Calls sind kostenpflichtig. Die Kosten hängen vom verwendeten Modell
 
 OpenAI hat Rate Limits pro Minute. Bei intensiver Nutzung können Requests abgelehnt werden.
 
-## 👥 Team
+## Team
 
 **Cian Vonlanthen & Malik Zehnder**  
 Vertiefungsarbeit 2024/2025
 
-## 📄 Lizenz
+## Lizenz
 
 Dieses Projekt wurde als schulische Vertiefungsarbeit entwickelt.
 
-## 🤝 Support
+## Support
 
 Bei Problemen oder Fragen:
 1. Prüfe die [QUICKSTART.md](../QUICKSTART.md) für häufige Probleme
 2. Prüfe die [Issues](../../issues) im Repository
 3. Kontaktiere die Entwickler
 
-## 🔄 Updates
+## Updates
 
 Um die neueste Version zu erhalten:
 
