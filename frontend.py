@@ -1276,9 +1276,9 @@ class APIManager(QMainWindow):
         """Wendet Stylesheet und Palette für das gewählte Theme an (dark/light)."""
         # Farben definieren
         accent = "#2563eb"  # Primär-Akzent (deeper blue)
-        success = "#3fb950"
-        danger = "#f85149"
-        warning = "#ffb86b"
+        success = "#2563eb"
+        danger = "#2563eb"
+        warning = "#2563eb"
 
         QApplication.setStyle("Fusion")
 
