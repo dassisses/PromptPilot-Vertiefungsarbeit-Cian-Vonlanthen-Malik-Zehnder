@@ -662,6 +662,49 @@ class APIManager(QMainWindow):
             except Exception:
                 pass
 
+    def _read_clipboard_text(self, triggered_shortcut: Optional[str] = None) -> Optional[str]:
+        """Liest Text aus der Zwischenablage und zeigt bei Fehlern einheitliche Hinweise an."""
+        try:
+            return pyperclip.paste()
+        except Exception as exc:
+            if triggered_shortcut:
+                shortcut = format_shortcut_for_display(triggered_shortcut)
+                toast = f"❌ {shortcut}: Zwischenablage konnte nicht gelesen werden"
+                detail = f"{shortcut} konnte nicht ausgeführt werden: {exc}"
+            else:
+                toast = "❌ Zwischenablage konnte nicht gelesen werden"
+                detail = f"Zwischenablage konnte nicht gelesen werden: {exc}"
+
+            self.show_toast(toast)
+            self.tray_icon.showMessage(
+                "Zwischenablage-Fehler",
+                detail,
+                QSystemTrayIcon.MessageIcon.Critical,
+                5000
+            )
+            print(f"[DEBUG] Fehler beim Lesen der Zwischenablage: {exc}")
+            return None
+
+    def copy_to_clipboard(self, text: str, *, success_toast: Optional[str] = None, error_context: str = "Text") -> bool:
+        """Kopiert Text in die Zwischenablage und behandelt Fehler konsistent."""
+        try:
+            pyperclip.copy(text)
+        except Exception as exc:
+            message = f"❌ {error_context} konnte nicht kopiert werden: {exc}"
+            self.show_toast(message)
+            self.tray_icon.showMessage(
+                "Zwischenablage-Fehler",
+                message,
+                QSystemTrayIcon.MessageIcon.Critical,
+                4500
+            )
+            print(f"[DEBUG] Fehler beim Schreiben in die Zwischenablage: {exc}")
+            return False
+
+        if success_toast:
+            self.show_toast(success_toast, 3000)
+        return True
+
     def _convert_to_pynput_hotkey(self, qt_shortcut: str) -> str:
         """Convert a canonicalized Qt-like shortcut (e.g. 'Ctrl+Alt+Z') to a pynput GlobalHotKeys string ('<ctrl>+<alt>+z')."""
         if not qt_shortcut:
@@ -1221,19 +1264,10 @@ class APIManager(QMainWindow):
         preset = self.backend.presets[preset_index]
         print(f"[DEBUG] Preset gefunden: {preset['name']}")
 
-        try:
-            clipboard_text = pyperclip.paste()
-            print(f"[DEBUG] Zwischenablage gelesen: {len(clipboard_text) if clipboard_text else 0} Zeichen")
-        except Exception as e:
-            self.show_toast(f"❌ Fehler beim Lesen der Zwischenablage: {str(e)}")
-            self.tray_icon.showMessage(
-                "Zwischenablage-Fehler",
-                f"{format_shortcut_for_display(shortcut_key)} konnte nicht ausgeführt werden: {str(e)}",
-                QSystemTrayIcon.MessageIcon.Critical,
-                5000
-            )
-            print(f"[DEBUG] Fehler beim Lesen der Zwischenablage: {e}")
+        clipboard_text = self._read_clipboard_text(triggered_shortcut=shortcut_key)
+        if clipboard_text is None:
             return
+        print(f"[DEBUG] Zwischenablage gelesen: {len(clipboard_text) if clipboard_text else 0} Zeichen")
 
         if not clipboard_text:
             self.show_toast(f"ℹ️ Zwischenablage ist leer")
@@ -1261,7 +1295,9 @@ class APIManager(QMainWindow):
             return
 
         preset = self.backend.presets[preset_index]
-        clipboard_text = pyperclip.paste()
+        clipboard_text = self._read_clipboard_text()
+        if clipboard_text is None:
+            return
 
         if not clipboard_text:
             self.show_toast("Zwischenablage ist leer")
@@ -1278,8 +1314,11 @@ class APIManager(QMainWindow):
 
         if result.get("status") == "success":
             response = result.get("response", "")
-            pyperclip.copy(response)
-            self.show_toast("✅ Fertig! Ergebnis kopiert", 3000)
+            self.copy_to_clipboard(
+                response,
+                success_toast="✅ Fertig! Ergebnis kopiert",
+                error_context=f"Ergebnis von '{preset['name']}'"
+            )
             self.home_page.show_result(preset["name"], clipboard_text, response)
 
             # Show system notification if via Shortcut oder Fenster minimiert
@@ -1711,10 +1750,21 @@ class HomePage(BasePage):
 
     def copy_result(self):
         text = self.result_content.toPlainText()
-        if text:
-            pyperclip.copy(text)
-            if hasattr(self.controller, 'show_toast'):
-                self.controller.show_toast("In Zwischenablage kopiert")
+        if not text:
+            return
+
+        controller = getattr(self, 'controller', None)
+        if controller and hasattr(controller, 'copy_to_clipboard'):
+            controller.copy_to_clipboard(
+                text,
+                success_toast="In Zwischenablage kopiert",
+                error_context="Ergebnis-Text"
+            )
+        else:
+            try:
+                pyperclip.copy(text)
+            except Exception:
+                pass
 
     def clear_result(self):
         self.result_content.clear()

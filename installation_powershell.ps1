@@ -13,9 +13,8 @@ if (Test-Path $activation_script) {
     Write-Host "Virtuelle Umgebung aktiviert."
 
     # 3. Installiere die Python-Pakete
-    Write-Host "Installiere PySide6, pyperclip und openai..."
-    pip install PySide6 pyperclip
-    pip install openai
+    Write-Host "Installiere PySide6, pyperclip, openai und pynput..."
+    pip install PySide6 pyperclip openai pynput
 
     Write-Host ""
     Write-Host "Installation abgeschlossen."
