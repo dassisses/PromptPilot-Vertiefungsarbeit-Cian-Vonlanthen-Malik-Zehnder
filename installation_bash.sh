@@ -10,8 +10,8 @@ echo "Aktiviere die virtuelle Umgebung..."
 source venv/bin/activate
 
 # 3. Installiere die Python-Pakete
-echo "Installiere PySide6 und pyperclip und openai..."
-pip install PySide6 pyperclip openai
+echo "Installiere PySide6, pyperclip, openai und pynput..."
+pip install PySide6 pyperclip openai pynput
 
 # HINWEIS FÜR LINUX:
 echo ""
