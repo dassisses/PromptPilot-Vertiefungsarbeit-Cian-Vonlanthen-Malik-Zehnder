@@ -235,6 +235,10 @@ def get_modifier_key():
 MODIFIER_KEY = get_modifier_key()
 MODIFIER_KEY_DISPLAY = "⌘" if sys.platform == "darwin" else "Ctrl"
 
+# Use a guaranteed available font family to avoid expensive lookups for missing
+# fonts such as "SF Pro Display".
+APP_FONT_FAMILY = QFont().defaultFamily() or "Sans Serif"
+
 
 class EditPresetDialog(QDialog):
     """Dialog zum Bearbeiten eines bestehenden Presets"""
@@ -334,7 +338,7 @@ class ShortcutDialog(QDialog):
 
         info_label = QLabel("Tastenkombination")
         info_label.setObjectName("dialog_title")
-        info_label.setFont(QFont("SF Pro Display", 16, QFont.Weight.Bold))
+        info_label.setFont(QFont(APP_FONT_FAMILY, 16, QFont.Weight.Bold))
         layout.addWidget(info_label)
 
         desc = QLabel("Definiere eine Tastenkombination für schnellen Zugriff")
@@ -430,7 +434,7 @@ class ShortcutOverviewDialog(QDialog):
 
         title = QLabel("Registrierte Shortcuts")
         title.setObjectName("dialog_title")
-        title.setFont(QFont("SF Pro Display", 20, QFont.Weight.Bold))
+        title.setFont(QFont(APP_FONT_FAMILY, 20, QFont.Weight.Bold))
         layout.addWidget(title)
 
         subtitle = QLabel("Alle verfügbaren Tastenkombinationen auf einen Blick")
@@ -457,7 +461,7 @@ class ShortcutOverviewDialog(QDialog):
 
         system_title = QLabel("System-Shortcuts")
         system_title.setObjectName("card_title")
-        system_title.setFont(QFont("SF Pro Display", 14, QFont.Weight.Bold))
+        system_title.setFont(QFont(APP_FONT_FAMILY, 14, QFont.Weight.Bold))
         system_layout.addWidget(system_title)
 
         system_layout.addWidget(self.create_shortcut_item(format_shortcut_for_display(f"{MODIFIER_KEY}+1"), "Presets-Seite"))
@@ -473,7 +477,7 @@ class ShortcutOverviewDialog(QDialog):
 
         preset_title = QLabel("Preset-Shortcuts")
         preset_title.setObjectName("card_title")
-        preset_title.setFont(QFont("SF Pro Display", 14, QFont.Weight.Bold))
+        preset_title.setFont(QFont(APP_FONT_FAMILY, 14, QFont.Weight.Bold))
         preset_layout.addWidget(preset_title)
 
         if shortcuts_dict and presets:
@@ -854,7 +858,7 @@ class APIManager(QMainWindow):
 
         title = QLabel("PromptPilot")
         title.setObjectName("app_title")
-        title.setFont(QFont("SF Pro Display", 22, QFont.Weight.Bold))
+        title.setFont(QFont(APP_FONT_FAMILY, 22, QFont.Weight.Bold))
         layout.addWidget(title)
 
         # Separator
@@ -907,7 +911,7 @@ class APIManager(QMainWindow):
 
         nav_label = QLabel("NAVIGATION")
         nav_label.setObjectName("nav_label")
-        nav_label.setFont(QFont("SF Pro Display", 11, QFont.Weight.Bold))
+        nav_label.setFont(QFont(APP_FONT_FAMILY, 11, QFont.Weight.Bold))
         nav_layout.addWidget(nav_label)
 
         nav_layout.addSpacing(8)
@@ -932,12 +936,12 @@ class APIManager(QMainWindow):
 
         info = QLabel("PromptPilot v2.0")
         info.setObjectName("sidebar_info")
-        info.setFont(QFont("SF Pro Display", 10))
+        info.setFont(QFont(APP_FONT_FAMILY, 10))
         bottom_layout.addWidget(info)
 
         authors = QLabel("by Cian & Malik")
         authors.setObjectName("sidebar_authors")
-        authors.setFont(QFont("SF Pro Display", 9))
+        authors.setFont(QFont(APP_FONT_FAMILY, 9))
         bottom_layout.addWidget(authors)
 
         layout.addWidget(bottom)
@@ -1366,7 +1370,7 @@ class APIManager(QMainWindow):
 
             # Reduziertes, modernes Stylesheet für Dark Mode
             base_styles = f"""
-                QWidget {{ background-color: #0b1120; color: #e2e8f0; font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }}
+                QWidget {{ background-color: #0b1120; color: #e2e8f0; font-family: '{APP_FONT_FAMILY}', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }}
                 #top_nav {{ background-color: rgba(15, 23, 42, 0.78); border-bottom: 1px solid rgba(148, 163, 184, 0.18); }}
                 #sidebar {{ background-color: #111c2d; }}
                 #sidebar_info, #sidebar_authors {{ color: #94a3b8; }}
@@ -1421,7 +1425,7 @@ class APIManager(QMainWindow):
             self.setPalette(palette)
 
             base_styles = f"""
-                QWidget {{ background-color: #f8fafc; color: #0f172a; font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }}
+                QWidget {{ background-color: #f8fafc; color: #0f172a; font-family: '{APP_FONT_FAMILY}', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }}
                 #top_nav {{ background-color: rgba(255,255,255,0.96); border-bottom: 1px solid rgba(15, 23, 42, 0.08); }}
                 #sidebar {{ background-color: #ffffff; }}
                 #sidebar_info, #sidebar_authors {{ color: #64748b; }}
@@ -1457,8 +1461,8 @@ class APIManager(QMainWindow):
             """
 
         # Gemeinsames Stylesheet-Grundgerüst (Schriftfamilie, allgemeine Rundungen)
-        common = """
-            * { font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; }
+        common = f"""
+            * {{ font-family: '{APP_FONT_FAMILY}', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; }}
             QLineEdit, QComboBox, QTextEdit, QKeySequenceEdit { padding: 10px 12px; }
             QTextEdit { padding: 12px; }
             QPushButton { border: none; }
@@ -1508,11 +1512,11 @@ class HomePage(BasePage):
         header_layout.setSpacing(8)
         title = QLabel("Meine Presets")
         title.setObjectName("section_title")
-        title.setFont(QFont("SF Pro Display", 28, QFont.Weight.Bold))
+        title.setFont(QFont(APP_FONT_FAMILY, 28, QFont.Weight.Bold))
         header_layout.addWidget(title)
         subtitle = QLabel("Erstelle, verwalte und nutze deine API-Prompts")
         subtitle.setObjectName("section_subtitle")
-        subtitle.setFont(QFont("SF Pro Display", 14))
+        subtitle.setFont(QFont(APP_FONT_FAMILY, 14))
         header_layout.addWidget(subtitle)
         left_layout.addLayout(header_layout)
 
@@ -1570,7 +1574,7 @@ class HomePage(BasePage):
         form_layout.setSpacing(18)
         form_title = QLabel("Neues Preset erstellen")
         form_title.setObjectName("section_title")
-        form_title.setFont(QFont("SF Pro Display", 18, QFont.Weight.Bold))
+        form_title.setFont(QFont(APP_FONT_FAMILY, 18, QFont.Weight.Bold))
         form_layout.addWidget(form_title)
 
         name_label = QLabel("Preset-Name")
@@ -1616,7 +1620,7 @@ class HomePage(BasePage):
         save_btn = QPushButton("Preset Speichern")
         save_btn.setObjectName("btn_success")
         save_btn.setFixedHeight(44)
-        save_btn.setFont(QFont("SF Pro Display", 14, QFont.Weight.Bold))
+        save_btn.setFont(QFont(APP_FONT_FAMILY, 14, QFont.Weight.Bold))
         save_btn.clicked.connect(self.save_new_preset)
         btn_layout.addWidget(save_btn, 1)
         form_layout.addLayout(btn_layout)
@@ -1629,7 +1633,7 @@ class HomePage(BasePage):
         result_layout.setSpacing(14)
         result_header = QLabel("Ergebnis")
         result_header.setObjectName("section_title")
-        result_header.setFont(QFont("SF Pro Display", 16, QFont.Weight.Bold))
+        result_header.setFont(QFont(APP_FONT_FAMILY, 16, QFont.Weight.Bold))
         result_layout.addWidget(result_header)
         self.result_content = QTextEdit()
         self.result_content.setReadOnly(True)
@@ -1747,7 +1751,7 @@ class HomePage(BasePage):
             empty_layout.setSpacing(16)
             empty_title = QLabel("Keine Presets gefunden")
             empty_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            empty_title.setFont(QFont("SF Pro Display", 18, QFont.Weight.Bold))
+            empty_title.setFont(QFont(APP_FONT_FAMILY, 18, QFont.Weight.Bold))
             empty_title.setStyleSheet("color: #6c757d;")
             empty_layout.addWidget(empty_title)
             empty_text = QLabel("Erstelle dein erstes Preset mit dem Formular")
@@ -1977,12 +1981,12 @@ class CredentialsPage(BasePage):
 
         title = QLabel("API Einstellungen")
         title.setObjectName("section_title")
-        title.setFont(QFont("SF Pro Display", 28, QFont.Weight.Bold))
+        title.setFont(QFont(APP_FONT_FAMILY, 28, QFont.Weight.Bold))
         self.main_layout.addWidget(title)
 
         subtitle = QLabel("Konfiguriere deine OpenAI API-Zugangsdaten")
         subtitle.setObjectName("section_subtitle")
-        subtitle.setFont(QFont("SF Pro Display", 14))
+        subtitle.setFont(QFont(APP_FONT_FAMILY, 14))
         self.main_layout.addWidget(subtitle)
 
         # API Key Card
