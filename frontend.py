@@ -57,6 +57,7 @@ EDIT_BUTTON_COLOR = "#7c3aed"  # violet-ish instead of yellow for the edit butto
 
 
 MODIFIER_ORDER = ("Ctrl", "Meta", "Alt", "AltGr", "Shift")
+PRIMARY_MODIFIERS = {"Ctrl", "Alt", "AltGr", "Meta"}
 MODIFIER_SYNONYMS = {
     "ctrl": "Ctrl",
     "control": "Ctrl",
@@ -138,6 +139,11 @@ def canonicalize_shortcut(shortcut_str: str, platform: str = None) -> str:
         if canonical not in seen_mods:
             seen_mods.add(canonical)
             modifiers.append(canonical)
+
+    if not any(m in PRIMARY_MODIFIERS for m in modifiers):
+        raise ValueError(
+            "Shortcut benötigt mindestens einen Haupt-Modifier (Ctrl/Cmd oder Alt)."
+        )
 
     # Sortiere Modifier für eine stabile Darstellung
     modifiers.sort(key=lambda m: MODIFIER_ORDER.index(m) if m in MODIFIER_ORDER else len(MODIFIER_ORDER))
