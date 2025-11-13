@@ -237,7 +237,35 @@ MODIFIER_KEY_DISPLAY = "⌘" if sys.platform == "darwin" else "Ctrl"
 
 # Use a guaranteed available font family to avoid expensive lookups for missing
 # fonts such as "SF Pro Display".
-APP_FONT_FAMILY = QFont().defaultFamily() or "Sans Serif"
+# NOTE: Accessing QFont/QFontDatabase before a QApplication exists causes
+# "QFontDatabase: Must construct a QGuiApplication" errors.  We therefore use a
+# static fallback that is updated once the QApplication is created.
+APP_FONT_FAMILY = "Sans Serif"
+
+
+def refresh_app_font_family() -> None:
+    """Update the global font family after a QApplication exists."""
+
+    global APP_FONT_FAMILY
+
+    try:
+        # Prefer the application font when available.  This only works after a
+        # QApplication (or QGuiApplication) has been constructed.
+        app_font = QApplication.font()
+        if app_font and app_font.family():
+            APP_FONT_FAMILY = app_font.family()
+            return
+    except Exception:
+        # QApplication.font() may raise if no application instance exists yet.
+        pass
+
+    try:
+        default_family = QFont().defaultFamily()
+        if default_family:
+            APP_FONT_FAMILY = default_family
+    except Exception:
+        # If we cannot query Qt for a font we simply keep the fallback.
+        pass
 
 
 class EditPresetDialog(QDialog):
@@ -2140,6 +2168,8 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("PromptPilot")
     app.setOrganizationName("Cian & Malik")
+
+    refresh_app_font_family()
 
     window = APIManager()
     window.show()
