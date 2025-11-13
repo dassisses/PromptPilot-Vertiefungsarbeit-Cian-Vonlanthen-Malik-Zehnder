@@ -1502,10 +1502,10 @@ class APIManager(QMainWindow):
         # Gemeinsames Stylesheet-Grundgerüst (Schriftfamilie, allgemeine Rundungen)
         common = f"""
             * {{ font-family: '{APP_FONT_FAMILY}', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; }}
-            QLineEdit, QComboBox, QTextEdit, QKeySequenceEdit { padding: 10px 12px; }
-            QTextEdit { padding: 12px; }
-            QPushButton { border: none; }
-            QLabel#section_subtitle { color: rgba(148, 163, 184, 0.95); font-size: 15px; }
+            QLineEdit, QComboBox, QTextEdit, QKeySequenceEdit {{ padding: 10px 12px; }}
+            QTextEdit {{ padding: 12px; }}
+            QPushButton {{ border: none; }}
+            QLabel#section_subtitle {{ color: rgba(148, 163, 184, 0.95); font-size: 15px; }}
         """
 
         # Anwenden
