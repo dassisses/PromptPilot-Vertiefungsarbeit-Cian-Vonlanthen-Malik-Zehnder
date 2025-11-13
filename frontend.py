@@ -21,6 +21,33 @@ from PySide6.QtWidgets import (
 from backend import APIBackend
 
 
+MAC_ACCESSIBILITY_TRUSTED = True
+MAC_ACCESSIBILITY_WARNING = (
+    "macOS verweigert derzeit den Zugriff auf Bedienungshilfen. "
+    "Globale Shortcuts werden deaktiviert, bis die App in den Systemeinstellungen > Sicherheit > Bedienungshilfen "
+    "freigegeben wurde."
+)
+
+if sys.platform == "darwin" and PYNPUT_AVAILABLE:
+    try:
+        import Quartz  # type: ignore
+
+        def _is_process_trusted() -> bool:
+            try:
+                options = {Quartz.kAXTrustedCheckOptionPrompt: False}
+                return bool(Quartz.AXIsProcessTrustedWithOptions(options))
+            except Exception:
+                try:
+                    return bool(Quartz.AXIsProcessTrusted())
+                except Exception:
+                    return True
+
+        MAC_ACCESSIBILITY_TRUSTED = _is_process_trusted()
+    except Exception:
+        # Wenn wir den Status nicht zuverlässig bestimmen können, deaktivieren wir nichts automatisch.
+        MAC_ACCESSIBILITY_TRUSTED = True
+
+
 # ===== HELPER FUNCTIONS (müssen vor den Klassen definiert sein) =====
 
 # New UI / behavior constants
@@ -498,6 +525,17 @@ class APIManager(QMainWindow):
 
         # Backend frühzeitig initialisieren, damit Einstellungen gelesen werden können
         self.backend = APIBackend()
+
+        self.global_hotkeys_supported = PYNPUT_AVAILABLE
+        self._pending_accessibility_warning = False
+        if sys.platform == "darwin" and PYNPUT_AVAILABLE and not MAC_ACCESSIBILITY_TRUSTED:
+            self.global_hotkeys_supported = False
+            self._pending_accessibility_warning = True
+            print(
+                "[WARN] Globale Shortcuts deaktiviert: macOS hat keinen Zugriff auf Bedienungshilfen gewährt.",
+                file=sys.stderr,
+            )
+
         # Verwaltung von Shortcuts
         self.preset_shortcuts = {}
         self.preset_shortcut_actions = {}
@@ -584,9 +622,12 @@ class APIManager(QMainWindow):
         # Lade und registriere gespeicherte Preset-Shortcuts
         self.load_saved_shortcuts()
 
-        if PYNPUT_AVAILABLE and self._global_hotkey_map:
+        if self.global_hotkeys_supported and self._global_hotkey_map:
             # Start listener if es bereits registrierte Shortcuts gibt
             self._update_pynput_listener()
+
+        if self._pending_accessibility_warning:
+            QTimer.singleShot(800, self._show_accessibility_warning)
 
     def start_hotkey_listener(self):
         """(deprecated) kept for compatibility"""
@@ -651,7 +692,7 @@ class APIManager(QMainWindow):
 
     def _update_pynput_listener(self):
         """Starts or restarts the pynput GlobalHotKeys listener with current _global_hotkey_map."""
-        if not PYNPUT_AVAILABLE:
+        if not self.global_hotkeys_supported:
             return
 
         # Stop previous listener if running
@@ -677,7 +718,7 @@ class APIManager(QMainWindow):
 
     def _register_global_hotkey(self, qt_shortcut: str, preset_index: int, canonical: str):
         """Adds or updates the mapping used by the pynput listener and restarts it."""
-        if not PYNPUT_AVAILABLE or not qt_shortcut:
+        if not self.global_hotkeys_supported or not qt_shortcut:
             return
 
         pynput_hotkey = self._convert_to_pynput_hotkey(qt_shortcut)
@@ -710,7 +751,7 @@ class APIManager(QMainWindow):
 
     def _register_visibility_global_hotkey(self, qt_shortcut: str):
         """Registriert den Sichtbarkeits-Shortcut auch global via pynput."""
-        if not PYNPUT_AVAILABLE or not qt_shortcut:
+        if not self.global_hotkeys_supported or not qt_shortcut:
             return
 
         pynput_hotkey = self._convert_to_pynput_hotkey(qt_shortcut)
@@ -736,7 +777,7 @@ class APIManager(QMainWindow):
         self._update_pynput_listener()
 
     def _unregister_visibility_global_hotkey(self):
-        if not PYNPUT_AVAILABLE:
+        if not self.global_hotkeys_supported:
             return
         if self._visibility_pynput_key and self._visibility_pynput_key in self._global_hotkey_map:
             try:
@@ -952,7 +993,7 @@ class APIManager(QMainWindow):
         self.preset_shortcut_actions.clear()
         self.preset_shortcuts.clear()
 
-        if PYNPUT_AVAILABLE:
+        if self.global_hotkeys_supported:
             if self._pynput_listener:
                 try:
                     self._pynput_listener.stop()
@@ -966,7 +1007,7 @@ class APIManager(QMainWindow):
         self.load_saved_shortcuts()
 
     def _unregister_global_hotkey(self, shortcut_key: str):
-        if not PYNPUT_AVAILABLE or not shortcut_key:
+        if not self.global_hotkeys_supported or not shortcut_key:
             return
         pynput_key = self._shortcut_to_pynput.pop(shortcut_key, None)
         if pynput_key and pynput_key in self._global_hotkey_map:
@@ -1272,6 +1313,21 @@ class APIManager(QMainWindow):
         self.toast_label.hide()
         self.toast_timer.stop()
 
+    def _show_accessibility_warning(self):
+        if not self._pending_accessibility_warning:
+            return
+
+        self._pending_accessibility_warning = False
+        try:
+            self.show_toast("Globale Shortcuts deaktiviert – macOS-Berechtigung benötigt", 5000)
+        except Exception:
+            pass
+
+        try:
+            QMessageBox.warning(self, "macOS-Berechtigung benötigt", MAC_ACCESSIBILITY_WARNING)
+        except Exception:
+            print(MAC_ACCESSIBILITY_WARNING)
+
     def apply_stylesheets(self, theme='dark'):
         """Wendet Stylesheet und Palette für das gewählte Theme an (dark/light)."""
         # Farben definieren
@@ -1366,7 +1422,7 @@ class APIManager(QMainWindow):
                 QPushButton#nav_button[active="true"] {{ background-color: rgba(99, 102, 241, 0.2); color: #1e1b4b; font-weight: 600; border-radius: 10px; }}
                 QPushButton#nav_button {{ background: transparent; border: none; color: #334155; text-align: left; padding: 10px 14px; border-radius: 10px; }}
                 QPushButton#nav_button:hover {{ background-color: rgba(148, 163, 184, 0.22); }}
-                .content_card, .preset_card, .shortcut_card, #result_panel {{ background-color: #ffffff; border-radius: 16px; border: 1px solid rgba(15, 23, 42, 0.08); box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08); }}
+                .content_card, .preset_card, .shortcut_card, #result_panel {{ background-color: #ffffff; border-radius: 16px; border: 1px solid rgba(15, 23, 42, 0.08); }}
                 #page_stack {{ background: transparent; }}
                 QPushButton#btn_primary {{ background-color: {accent}; color: #f8fafc; border-radius: 12px; padding: 10px 18px; font-weight: 600; }}
                 QPushButton#btn_primary:hover {{ background-color: #4f46e5; }}
