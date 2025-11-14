@@ -1,8 +1,8 @@
 import sys
+import os
 import pyperclip
 import threading
 from typing import Optional
-import os
 try:
     from pynput import keyboard as _pynput_keyboard
     PYNPUT_AVAILABLE = True
@@ -783,8 +783,8 @@ class APIManager(QMainWindow):
 
     def _update_pynput_listener(self):
         """Starts or restarts the pynput GlobalHotKeys listener with current _global_hotkey_map."""
-        # Auf macOS oder wenn pynput nicht verfügbar ist: keine globalen Hotkeys starten
-        if not PYNPUT_AVAILABLE or sys.platform == "darwin":
+        # Nur starten, wenn pynput verfügbar ist
+        if not PYNPUT_AVAILABLE:
             return
 
         if not self.global_hotkeys_supported:
@@ -813,8 +813,8 @@ class APIManager(QMainWindow):
 
     def _register_global_hotkey(self, qt_shortcut: str, preset_index: int, canonical: str):
         """Adds or updates the mapping used by the pynput listener and restarts it."""
-        # Auf macOS oder ohne pynput keine globalen Hotkeys registrieren
-        if not PYNPUT_AVAILABLE or sys.platform == "darwin" or not qt_shortcut:
+        # Wenn kein pynput vorhanden oder kein Shortcut-String, abbrechen
+        if not PYNPUT_AVAILABLE or not qt_shortcut:
             return
 
         if not self.global_hotkeys_supported:
@@ -850,8 +850,8 @@ class APIManager(QMainWindow):
 
     def _register_visibility_global_hotkey(self, qt_shortcut: str):
         """Registriert den Sichtbarkeits-Shortcut auch global via pynput."""
-        # Auf macOS oder ohne pynput keine globalen Hotkeys registrieren
-        if not PYNPUT_AVAILABLE or sys.platform == "darwin" or not qt_shortcut:
+        # Aufrufen nur, wenn pynput verfügbar ist und ein Shortcut gesetzt wurde
+        if not PYNPUT_AVAILABLE or not qt_shortcut:
             return
 
         if not self.global_hotkeys_supported:
@@ -880,7 +880,7 @@ class APIManager(QMainWindow):
         self._update_pynput_listener()
 
     def _unregister_visibility_global_hotkey(self):
-        if not self.global_hotkeys_supported:
+        if not PYNPUT_AVAILABLE or not self.global_hotkeys_supported:
             return
         if self._visibility_pynput_key and self._visibility_pynput_key in self._global_hotkey_map:
             try:
@@ -1110,7 +1110,7 @@ class APIManager(QMainWindow):
         self.load_saved_shortcuts()
 
     def _unregister_global_hotkey(self, shortcut_key: str):
-        if not self.global_hotkeys_supported or not shortcut_key:
+        if not PYNPUT_AVAILABLE or not self.global_hotkeys_supported or not shortcut_key:
             return
         pynput_key = self._shortcut_to_pynput.pop(shortcut_key, None)
         if pynput_key and pynput_key in self._global_hotkey_map:
