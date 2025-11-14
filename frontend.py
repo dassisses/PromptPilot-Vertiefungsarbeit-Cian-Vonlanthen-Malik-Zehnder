@@ -2,10 +2,20 @@ import sys
 import pyperclip
 import threading
 from typing import Optional
+import os
 try:
     from pynput import keyboard as _pynput_keyboard
     PYNPUT_AVAILABLE = True
 except Exception:
+    _pynput_keyboard = None
+    PYNPUT_AVAILABLE = False
+
+IS_MAC = sys.platform == "darwin"
+
+# Wenn das Programm innerhalb von PyCharm auf macOS läuft, pynput für globale Hotkeys deaktivieren,
+# damit es nicht mit SIGTRAP crasht.
+if IS_MAC and os.environ.get("PYCHARM_HOSTED"):
+    print("[INFO] Running in PyCharm on macOS – disabling pynput GlobalHotKeys.")
     _pynput_keyboard = None
     PYNPUT_AVAILABLE = False
 from PySide6.QtCore import Qt, QTimer, QEvent
@@ -773,6 +783,10 @@ class APIManager(QMainWindow):
 
     def _update_pynput_listener(self):
         """Starts or restarts the pynput GlobalHotKeys listener with current _global_hotkey_map."""
+        # Auf macOS oder wenn pynput nicht verfügbar ist: keine globalen Hotkeys starten
+        if not PYNPUT_AVAILABLE or sys.platform == "darwin":
+            return
+
         if not self.global_hotkeys_supported:
             return
 
@@ -799,7 +813,11 @@ class APIManager(QMainWindow):
 
     def _register_global_hotkey(self, qt_shortcut: str, preset_index: int, canonical: str):
         """Adds or updates the mapping used by the pynput listener and restarts it."""
-        if not self.global_hotkeys_supported or not qt_shortcut:
+        # Auf macOS oder ohne pynput keine globalen Hotkeys registrieren
+        if not PYNPUT_AVAILABLE or sys.platform == "darwin" or not qt_shortcut:
+            return
+
+        if not self.global_hotkeys_supported:
             return
 
         pynput_hotkey = self._convert_to_pynput_hotkey(qt_shortcut)
@@ -832,7 +850,11 @@ class APIManager(QMainWindow):
 
     def _register_visibility_global_hotkey(self, qt_shortcut: str):
         """Registriert den Sichtbarkeits-Shortcut auch global via pynput."""
-        if not self.global_hotkeys_supported or not qt_shortcut:
+        # Auf macOS oder ohne pynput keine globalen Hotkeys registrieren
+        if not PYNPUT_AVAILABLE or sys.platform == "darwin" or not qt_shortcut:
+            return
+
+        if not self.global_hotkeys_supported:
             return
 
         pynput_hotkey = self._convert_to_pynput_hotkey(qt_shortcut)
