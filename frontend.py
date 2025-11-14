@@ -50,12 +50,17 @@ if sys.platform == "darwin" and PYNPUT_AVAILABLE:
                 try:
                     return bool(Quartz.AXIsProcessTrusted())
                 except Exception:
-                    return True
+                    # Wenn selbst das fehlschlägt, deaktivieren wir lieber globale Hotkeys,
+                    # damit macOS keinen Trace/BPT trap: 5 wegen fehlender Berechtigungen auslöst.
+                    return False
 
         MAC_ACCESSIBILITY_TRUSTED = _is_process_trusted()
-    except Exception:
-        # Wenn wir den Status nicht zuverlässig bestimmen können, deaktivieren wir nichts automatisch.
-        MAC_ACCESSIBILITY_TRUSTED = True
+        print(f"[DEBUG] macOS accessibility trusted: {MAC_ACCESSIBILITY_TRUSTED}")
+    except Exception as exc:
+        # Wenn wir den Status nicht ermitteln können, deaktivieren wir globale Hotkeys,
+        # um den oben beschriebenen Trace/BPT trap: 5 zu verhindern.
+        MAC_ACCESSIBILITY_TRUSTED = False
+        print(f"[WARN] Konnte macOS Accessibility-Status nicht ermitteln: {exc}", file=sys.stderr)
 
 
 # ===== HELPER FUNCTIONS (müssen vor den Klassen definiert sein) =====
