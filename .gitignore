@@ -5,6 +5,7 @@ __pycache__/
 *.pyd
 *.egg-info/
 *.spec
+!promptpilot.spec
 
 # Virtual environments
 .venv/
