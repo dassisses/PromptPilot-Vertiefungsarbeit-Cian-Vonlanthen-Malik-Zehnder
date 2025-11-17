@@ -1,32 +1,32 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-set -e
+APP_NAME="PromptPilot.app"
+SPEC_FILE="promptpilot.spec"
+BUILD_DIR="build"
+DIST_DIR="dist"
+APP_PATH="$DIST_DIR/$APP_NAME"
+RESOURCES_DIR="$APP_PATH/Contents/Resources/resources"
+MACOS_DIR="$APP_PATH/Contents/MacOS"
 
-echo "===> Aktivieren der virtuellen Umgebung…"
-source .venv/bin/activate
+printf '===> Cleaning previous build artifacts...\n'
+rm -rf "$BUILD_DIR" "$DIST_DIR"
 
-echo "===> Abhängigkeiten installieren..."
-pip install -r requirements.txt
-pip install pyinstaller
+printf '===> Running PyInstaller with %s...\n' "$SPEC_FILE"
+pyinstaller "$SPEC_FILE"
 
-echo "===> Entferne alte Builds..."
-rm -rf build dist PromptPilot.app
+printf '===> Preparing resource directory...\n'
+mkdir -p "$RESOURCES_DIR"
 
-echo "===> Starte PyInstaller..."
-pyinstaller promptpilot.spec
+for resource in presets.json credentials.json settings.json backend.py; do
+    printf '     -> Installing %s into app resources...\n' "$resource"
+    cp "$resource" "$RESOURCES_DIR/"
+done
 
-echo "===> Kopiere Backend-Dateien..."
-mkdir -p dist/PromptPilot.app/Contents/Resources/appdata
+printf '===> Installing custom start launcher...\n'
+install -m 755 start "$MACOS_DIR/start"
 
-cp backend.py dist/PromptPilot.app/Contents/Resources/appdata/
-cp presets.json dist/PromptPilot.app/Contents/Resources/appdata/
-cp credentials.json dist/PromptPilot.app/Contents/Resources/appdata/
-cp settings.json dist/PromptPilot.app/Contents/Resources/appdata/
+printf '===> Applying custom Info.plist...\n'
+cp Info.plist "$APP_PATH/Contents/Info.plist"
 
-echo "===> Fix: App icon + start script"
-cp start.sh dist/PromptPilot.app/Contents/MacOS/start
-
-chmod +x dist/PromptPilot.app/Contents/MacOS/start
-
-echo "===> Fertig! App befindet sich unter:"
-echo "dist/PromptPilot.app"
+printf '===> Final app available at: %s\n' "$APP_PATH"

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+RESOURCES_DIR="$APP_DIR/Resources/resources"
+BINARY="$APP_DIR/MacOS/PromptPilot"
+
+export PYTHONPATH="$RESOURCES_DIR${PYTHONPATH:+:$PYTHONPATH}"
+cd "$APP_DIR/Resources"
+exec "$BINARY" "$@"

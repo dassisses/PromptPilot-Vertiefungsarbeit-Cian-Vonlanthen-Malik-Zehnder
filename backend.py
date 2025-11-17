@@ -1,17 +1,41 @@
 import json
 import os
+import sys
 from typing import Dict, List
+
 import openai
+
+
+def resource_path(filename: str) -> str:
+    """Resolve resource paths for dev and PyInstaller bundle modes."""
+    if hasattr(sys, "_MEIPASS"):
+        return os.path.join(sys._MEIPASS, "resources", filename)
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    appdata_dir = os.path.join(base_dir, "appdata")
+    candidate = os.path.join(appdata_dir, filename)
+    if os.path.exists(candidate):
+        return candidate
+    return os.path.join(base_dir, filename)
+
+
+PRESETS_FILE = resource_path("presets.json")
+CREDENTIALS_FILE = resource_path("credentials.json")
+SETTINGS_FILE = resource_path("settings.json")
 
 
 class PromptPilotBackend:
     def __init__(self):
-        self.preset_file = "presets.json"
-        self.credentials_file = "credentials.json"
+        self.preset_file = PRESETS_FILE
+        self.credentials_file = CREDENTIALS_FILE
+        self.settings_file = SETTINGS_FILE
         self._init_files()
         self.client = None
 
     def _init_files(self):
+        os.makedirs(os.path.dirname(self.preset_file) or ".", exist_ok=True)
+        os.makedirs(os.path.dirname(self.credentials_file) or ".", exist_ok=True)
+        os.makedirs(os.path.dirname(self.settings_file) or ".", exist_ok=True)
         # Initialize presets.json if not exists
         if not os.path.exists(self.preset_file):
             default_presets = [
@@ -29,8 +53,6 @@ class PromptPilotBackend:
             with open(self.credentials_file, 'w') as f:
                 json.dump([], f, indent=2)
 
-        # Einstellungen-Datei (z.B. Theme, Show-Shortcut) initialisieren
-        self.settings_file = "settings.json"
         if not os.path.exists(self.settings_file):
             default_settings = {"theme": "dark", "show_shortcut": ""}
             with open(self.settings_file, 'w') as f:
