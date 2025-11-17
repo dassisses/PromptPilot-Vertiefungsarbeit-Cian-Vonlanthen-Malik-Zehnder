@@ -1,5 +1,4 @@
 import sys
-import os
 import pyperclip
 import threading
 from typing import Optional
@@ -10,14 +9,6 @@ except Exception:
     _pynput_keyboard = None
     PYNPUT_AVAILABLE = False
 
-IS_MAC = sys.platform == "darwin"
-
-# Wenn das Programm innerhalb von PyCharm auf macOS läuft, pynput für globale Hotkeys deaktivieren,
-# damit es nicht mit SIGTRAP crasht.
-if IS_MAC and os.environ.get("PYCHARM_HOSTED"):
-    print("[INFO] Running in PyCharm on macOS – disabling pynput GlobalHotKeys.")
-    _pynput_keyboard = None
-    PYNPUT_AVAILABLE = False
 from PySide6.QtCore import Qt, QTimer, QEvent
 from PySide6.QtGui import QFont, QAction, QKeySequence, QPalette, QColor
 from PySide6.QtWidgets import (
@@ -32,35 +23,12 @@ from backend import APIBackend
 
 
 MAC_ACCESSIBILITY_TRUSTED = True
-MAC_ACCESSIBILITY_WARNING = (
-    "macOS verweigert derzeit den Zugriff auf Bedienungshilfen. "
-    "Globale Shortcuts werden deaktiviert, bis die App in den Systemeinstellungen > Sicherheit > Bedienungshilfen "
-    "freigegeben wurde."
-)
 
-if sys.platform == "darwin" and PYNPUT_AVAILABLE:
-    try:
-        import Quartz  # type: ignore
 
-        def _is_process_trusted() -> bool:
-            try:
-                options = {Quartz.kAXTrustedCheckOptionPrompt: False}
-                return bool(Quartz.AXIsProcessTrustedWithOptions(options))
-            except Exception:
-                try:
-                    return bool(Quartz.AXIsProcessTrusted())
-                except Exception:
-                    # Wenn selbst das fehlschlägt, deaktivieren wir lieber globale Hotkeys,
-                    # damit macOS keinen Trace/BPT trap: 5 wegen fehlender Berechtigungen auslöst.
-                    return False
-
-        MAC_ACCESSIBILITY_TRUSTED = _is_process_trusted()
-        print(f"[DEBUG] macOS accessibility trusted: {MAC_ACCESSIBILITY_TRUSTED}")
-    except Exception as exc:
-        # Wenn wir den Status nicht ermitteln können, deaktivieren wir globale Hotkeys,
-        # um den oben beschriebenen Trace/BPT trap: 5 zu verhindern.
-        MAC_ACCESSIBILITY_TRUSTED = False
-        print(f"[WARN] Konnte macOS Accessibility-Status nicht ermitteln: {exc}", file=sys.stderr)
+def _is_process_trusted() -> bool:
+    # PyInstaller gibt bei macOS immer False zurück.
+    # Wir deaktivieren die native Abfrage vollständig.
+    return True
 
 
 # ===== HELPER FUNCTIONS (müssen vor den Klassen definiert sein) =====
@@ -579,15 +547,7 @@ class APIManager(QMainWindow):
         # Backend frühzeitig initialisieren, damit Einstellungen gelesen werden können
         self.backend = APIBackend()
 
-        self.global_hotkeys_supported = PYNPUT_AVAILABLE
-        self._pending_accessibility_warning = False
-        if sys.platform == "darwin" and PYNPUT_AVAILABLE and not MAC_ACCESSIBILITY_TRUSTED:
-            self.global_hotkeys_supported = False
-            self._pending_accessibility_warning = True
-            print(
-                "[WARN] Globale Shortcuts deaktiviert: macOS hat keinen Zugriff auf Bedienungshilfen gewährt.",
-                file=sys.stderr,
-            )
+        self.global_hotkeys_supported = True
 
         # Verwaltung von Shortcuts
         self.preset_shortcuts = {}
@@ -678,9 +638,6 @@ class APIManager(QMainWindow):
         if self.global_hotkeys_supported and self._global_hotkey_map:
             # Start listener if es bereits registrierte Shortcuts gibt
             self._update_pynput_listener()
-
-        if self._pending_accessibility_warning:
-            QTimer.singleShot(800, self._show_accessibility_warning)
 
     def start_hotkey_listener(self):
         """(deprecated) kept for compatibility"""
@@ -1416,21 +1373,6 @@ class APIManager(QMainWindow):
     def hide_toast(self):
         self.toast_label.hide()
         self.toast_timer.stop()
-
-    def _show_accessibility_warning(self):
-        if not self._pending_accessibility_warning:
-            return
-
-        self._pending_accessibility_warning = False
-        try:
-            self.show_toast("Globale Shortcuts deaktiviert – macOS-Berechtigung benötigt", 5000)
-        except Exception:
-            pass
-
-        try:
-            QMessageBox.warning(self, "macOS-Berechtigung benötigt", MAC_ACCESSIBILITY_WARNING)
-        except Exception:
-            print(MAC_ACCESSIBILITY_WARNING)
 
     def apply_stylesheets(self, theme='dark'):
         """Wendet Stylesheet und Palette für das gewählte Theme an (dark/light)."""
