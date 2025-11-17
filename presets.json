@@ -1,8 +1,0 @@
-[
-  {
-    "name": "test",
-    "prompt": "\u00fcbersetze auf ennglish",
-    "api_type": "GPT-4",
-    "shortcut": "Ctrl+Y"
-  }
-]
