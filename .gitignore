@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+*.spec
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Editor settings
+.idea/
+.vscode/
+.DS_Store
+
+# Local app data
+presets.json
+credentials.json
+settings.json
+run_promptpilot.command
+
+# Build artifacts
+dist/
+build/

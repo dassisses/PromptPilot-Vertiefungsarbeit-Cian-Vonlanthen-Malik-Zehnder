@@ -28,26 +28,20 @@ PromptPilot automatisiert repetitive Aufgaben mit Large Language Models (LLMs). 
 git clone <repository-url>
 cd PromptPilot-Vertiefungsarbeit-Cian-Vonlanthen-Malik-Zehnder
 
-# 2. Virtuelle Umgebung erstellen
-python3 -m venv venv
-
-# 3. Virtuelle Umgebung aktivieren
-source venv/bin/activate  # macOS/Linux
+# 2. Abhängigkeiten installieren (legt automatisch .venv an)
+./scripts/install.sh  # macOS/Linux
 # oder
-venv\Scripts\activate  # Windows
-
-# 4. Dependencies installieren
-pip install -r requirements.txt
+./scripts/install.ps1  # Windows (PowerShell)
 ```
 
 ### Anwendung starten
 
 ```bash
 # Mit Startskript (empfohlen)
-./start.sh
+./scripts/start.sh
 
 # Oder manuell
-source venv/bin/activate
+source .venv/bin/activate
 python3 frontend.py
 ```
 
@@ -105,13 +99,10 @@ PromptPilot/
 ├── backend.py              # Backend-Logik (API-Calls, Datenverwaltung)
 ├── frontend.py             # GUI-Anwendung (PySide6)
 ├── requirements.txt        # Python-Dependencies
-├── start.sh               # Startskript (macOS/Linux)
-├── README.md              # Diese Datei
-├── QUICKSTART.md          # Schnellanleitung
-├── Konzept.md             # Projektkonzept und Planung
-├── presets.json           # Gespeicherte Presets (auto-generiert)
-├── credentials.json       # Gespeicherte API-Keys (auto-generiert)
-└── venv/                  # Virtuelle Python-Umgebung
+├── scripts/                # Hilfsskripte (install/start/build/...)
+├── README.md               # Kurzüberblick
+├── docs/README.md          # Ausführliche Dokumentation (diese Datei)
+└── .venv/                  # Virtuelle Python-Umgebung (auto erstellt)
 ```
 
 ## 🔧 Technologien
@@ -125,10 +116,12 @@ PromptPilot/
 
 Alle Daten werden lokal in JSON-Dateien gespeichert:
 
-- **`presets.json`** - Deine Preset-Vorlagen
-- **`credentials.json`** - Deine API-Keys (vertraulich!)
+- **`presets.json`** - Deine Preset-Vorlagen (wird automatisch erstellt)
+- **`credentials.json`** - Deine API-Keys (vertraulich, lokal gespeichert!)
+- **`settings.json`** - UI-Einstellungen wie Theme und Shortcut-Anzeige
 
-**Sicherheitshinweis**: Teile die `credentials.json` niemals öffentlich!
+Die Dateien befinden sich im Projektverzeichnis, sind aber in `.gitignore`
+eingetragen. **Sicherheitshinweis**: Teile die `credentials.json` niemals öffentlich!
 
 ## 🐛 Problembehandlung
 
@@ -136,7 +129,7 @@ Alle Daten werden lokal in JSON-Dateien gespeichert:
 
 ```bash
 # Dependencies neu installieren
-source venv/bin/activate
+source .venv/bin/activate
 pip install --upgrade -r requirements.txt
 ```
 
@@ -144,8 +137,8 @@ pip install --upgrade -r requirements.txt
 
 ```bash
 # Stelle sicher, dass die virtuelle Umgebung aktiviert ist
-source venv/bin/activate  # macOS/Linux
-venv\Scripts\activate      # Windows
+source .venv/bin/activate  # macOS/Linux
+.venv\Scripts\activate      # Windows
 
 # Dependencies installieren
 pip install -r requirements.txt
@@ -162,7 +155,7 @@ pip install -r requirements.txt
 
 ```bash
 # Prüfe ob alle Dependencies installiert sind
-source venv/bin/activate
+source .venv/bin/activate
 python3 -c "import PySide6; import openai; import pyperclip; print('✓ Alle OK')"
 ```
 
@@ -171,7 +164,7 @@ python3 -c "import PySide6; import openai; import pyperclip; print('✓ Alle OK'
 Um das Backend direkt zu testen:
 
 ```bash
-source venv/bin/activate
+source .venv/bin/activate
 python3 backend.py
 ```
 
@@ -258,7 +251,7 @@ Um die neueste Version zu erhalten:
 
 ```bash
 git pull origin main
-source venv/bin/activate
+source .venv/bin/activate
 pip install --upgrade -r requirements.txt
 ```
 
