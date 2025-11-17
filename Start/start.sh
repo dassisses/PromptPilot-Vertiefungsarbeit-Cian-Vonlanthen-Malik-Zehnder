@@ -8,4 +8,3 @@ source venv/bin/activate
 
 # Starte die Anwendung
 python3 frontend.py
-
