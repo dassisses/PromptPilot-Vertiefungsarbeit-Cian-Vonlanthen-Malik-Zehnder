@@ -42,7 +42,7 @@ cd PromptPilot-Vertiefungsarbeit-Cian-Vonlanthen-Malik-Zehnder
 
 # Oder manuell
 source .venv/bin/activate
-python3 frontend.py
+python3 main.py
 ```
 
 ## Verwendung
