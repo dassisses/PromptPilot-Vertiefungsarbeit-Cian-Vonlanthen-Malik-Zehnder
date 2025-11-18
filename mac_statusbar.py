@@ -128,7 +128,7 @@ class MacStatusBarApp(QObject):
                 clipboard = QApplication.clipboard()
                 clipboard.setText(response)
             message = snippet or "Antwort wurde kopiert."
-            self._notify(preset_name, message, QSystemTrayIcon.Information)
+            self._notify_preset_finished(preset_name, message)
         else:
             self._notify(
                 preset_name,
@@ -150,7 +150,10 @@ class MacStatusBarApp(QObject):
             app.quit()
 
     def _handle_activation(self, reason: QSystemTrayIcon.ActivationReason) -> None:
-        if reason in {QSystemTrayIcon.Trigger, QSystemTrayIcon.Context, QSystemTrayIcon.DoubleClick}:
+        # Showing the popup for every activation reason caused the menu to appear
+        # twice on macOS (the native menu plus our manual popup). Limiting the
+        # manual popup to left-clicks keeps the UX clean.
+        if reason == QSystemTrayIcon.Trigger:
             self._menu.popup(QCursor.pos())
 
     def _load_icon(self) -> QIcon:
@@ -173,3 +176,9 @@ class MacStatusBarApp(QObject):
         icon: QSystemTrayIcon.MessageIcon,
     ) -> None:
         self._tray.showMessage(title, message, icon, 8000)
+
+    def _notify_preset_finished(self, preset_name: str, message: str) -> None:
+        """Show a notification when a preset triggered via the status bar finishes."""
+        title = f"{preset_name} abgeschlossen"
+        body = message or "Preset erfolgreich beendet."
+        self._notify(title, body, QSystemTrayIcon.Information)
