@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from typing import Dict, Set, TYPE_CHECKING
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
@@ -9,6 +10,8 @@ from PySide6.QtGui import QAction, QCursor, QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from backend import resource_path
+
+IS_NATIVE_MAC = sys.platform == "darwin"
 
 if TYPE_CHECKING:  # pragma: no cover - only for type checking
     from backend import APIBackend
@@ -150,10 +153,9 @@ class MacStatusBarApp(QObject):
             app.quit()
 
     def _handle_activation(self, reason: QSystemTrayIcon.ActivationReason) -> None:
-        # Showing the popup for every activation reason caused the menu to appear
-        # twice on macOS (the native menu plus our manual popup). Limiting the
-        # manual popup to left-clicks keeps the UX clean.
-        if reason == QSystemTrayIcon.Trigger:
+        # macOS zeigt das native Menü automatisch an, daher nur auf anderen
+        # Plattformen manuell öffnen.
+        if reason == QSystemTrayIcon.Trigger and not IS_NATIVE_MAC:
             self._menu.popup(QCursor.pos())
 
     def _load_icon(self) -> QIcon:

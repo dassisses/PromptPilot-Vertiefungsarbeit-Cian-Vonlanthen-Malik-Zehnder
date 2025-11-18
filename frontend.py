@@ -565,8 +565,9 @@ class APIManager(QMainWindow):
         super().__init__()
         self._platform = PLATFORM
         self.setWindowTitle("PromptPilot")
-        # Fenster auf feste Größe setzen (nicht veränderbar)
-        self.setFixedSize(1200, 700)
+        # Erlaube eine größere Standardgröße und verhindere unnötiges Scrollen
+        self.setMinimumSize(1200, 720)
+        self.resize(1380, 860)
 
         # Backend frühzeitig initialisieren, damit Einstellungen gelesen werden können
         self.backend = APIBackend()
