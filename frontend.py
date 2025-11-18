@@ -3,10 +3,19 @@ import sys
 import pyperclip
 import threading
 from typing import Optional
-try:
-    from pynput import keyboard as _pynput_keyboard
-    PYNPUT_AVAILABLE = True
-except Exception:
+
+from backend import APIBackend, resource_path, get_platform
+
+PLATFORM = get_platform()
+
+if PLATFORM == "windows":
+    try:
+        from pynput import keyboard as _pynput_keyboard
+        PYNPUT_AVAILABLE = True
+    except Exception:
+        _pynput_keyboard = None
+        PYNPUT_AVAILABLE = False
+else:
     _pynput_keyboard = None
     PYNPUT_AVAILABLE = False
 
@@ -19,7 +28,6 @@ from PySide6.QtWidgets import (
     QTextEdit, QDialog, QSplitter, QKeySequenceEdit,
     QSystemTrayIcon, QMenu, QStyle
 )
-from backend import APIBackend, resource_path
 
 
 MAC_ACCESSIBILITY_TRUSTED = True
@@ -540,6 +548,7 @@ class ShortcutOverviewDialog(QDialog):
 class APIManager(QMainWindow):
     def __init__(self):
         super().__init__()
+        self._platform = PLATFORM
         self.setWindowTitle("PromptPilot")
         # Fenster auf feste Größe setzen (nicht veränderbar)
         self.setFixedSize(1200, 700)
@@ -547,7 +556,7 @@ class APIManager(QMainWindow):
         # Backend frühzeitig initialisieren, damit Einstellungen gelesen werden können
         self.backend = APIBackend()
 
-        self.global_hotkeys_supported = True
+        self.global_hotkeys_supported = self._platform == "windows" and PYNPUT_AVAILABLE
 
         # Verwaltung von Shortcuts
         self.preset_shortcuts = {}
@@ -568,6 +577,7 @@ class APIManager(QMainWindow):
         self._close_to_tray_notified = False
         self.tray_icon = None
         self.tray_menu = None
+        self.statusbar_app = None
 
         # Theme initialisieren (dark/light) aus Backend-Einstellungen
         self.current_theme = self.backend.get_setting('theme', 'dark')
@@ -579,8 +589,8 @@ class APIManager(QMainWindow):
         self.setCentralWidget(self.central_widget)
 
         main_layout = QVBoxLayout(self.central_widget)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(12, 12, 12, 12)
+        main_layout.setSpacing(12)
 
         self.create_top_nav()
         main_layout.addWidget(self.top_nav)
@@ -588,7 +598,7 @@ class APIManager(QMainWindow):
         content_container = QWidget()
         content_layout = QHBoxLayout(content_container)
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(0)
+        content_layout.setSpacing(12)
 
         self.create_sidebar()
         content_layout.addWidget(self.sidebar)
@@ -629,7 +639,8 @@ class APIManager(QMainWindow):
             self._update_pynput_listener()
 
         self._tray_boot_message_shown = False
-        self._setup_tray_icon()
+        if self._platform != "mac":
+            self._setup_tray_icon()
 
     def start_hotkey_listener(self):
         """(deprecated) kept for compatibility"""
@@ -639,11 +650,12 @@ class APIManager(QMainWindow):
         if self._is_quitting:
             super().closeEvent(event)
             return
-        if self.tray_icon and self.tray_icon.isVisible():
+        tray = self._current_tray_icon()
+        if tray:
             event.ignore()
             self.hide()
             if not self._close_to_tray_notified:
-                self.tray_icon.showMessage(
+                self._notify_tray(
                     "PromptPilot",
                     "PromptPilot läuft weiter in der Statusleiste.",
                     QSystemTrayIcon.MessageIcon.Information,
@@ -655,6 +667,23 @@ class APIManager(QMainWindow):
 
     # ------------------------------------------------------------------
     # Status bar / tray helpers
+    def attach_statusbar_app(self, status_app):
+        self.statusbar_app = status_app
+
+    def _current_tray_icon(self):
+        if self.tray_icon and self.tray_icon.isVisible():
+            return self.tray_icon
+        if self.statusbar_app and getattr(self.statusbar_app, "tray_icon", None):
+            tray = self.statusbar_app.tray_icon
+            if tray and tray.isVisible():
+                return tray
+        return None
+
+    def _notify_tray(self, title, message, icon, duration=4500):
+        tray = self._current_tray_icon()
+        if tray:
+            tray.showMessage(title, message, icon, duration)
+
     def _setup_tray_icon(self):
         icon = self._load_tray_icon()
         self.tray_icon = QSystemTrayIcon(icon, self)
@@ -665,7 +694,7 @@ class APIManager(QMainWindow):
         self.refresh_tray_menu()
         self.tray_icon.show()
         if not self._tray_boot_message_shown:
-            self.tray_icon.showMessage(
+            self._notify_tray(
                 "PromptPilot",
                 "PromptPilot läuft im Hintergrund. Über das Statusleisten-Symbol kannst du Presets und Einstellungen öffnen.",
                 QSystemTrayIcon.MessageIcon.Information,
@@ -674,39 +703,41 @@ class APIManager(QMainWindow):
             self._tray_boot_message_shown = True
 
     def refresh_tray_menu(self):
-        if not self.tray_menu:
-            return
-        self.tray_menu.clear()
-        presets = list(self.backend.presets)
-        if presets:
-            for idx, preset in enumerate(presets):
-                action = QAction(preset["name"], self)
-                action.triggered.connect(lambda _checked=False, i=idx: self.execute_preset_by_index(i))
-                self.tray_menu.addAction(action)
-        else:
-            placeholder = QAction("Keine Presets verfügbar", self)
-            placeholder.setEnabled(False)
-            self.tray_menu.addAction(placeholder)
+        if self.tray_menu:
+            self.tray_menu.clear()
+            presets = list(self.backend.presets)
+            if presets:
+                for idx, preset in enumerate(presets):
+                    action = QAction(preset["name"], self)
+                    action.triggered.connect(lambda _checked=False, i=idx: self.execute_preset_by_index(i))
+                    self.tray_menu.addAction(action)
+            else:
+                placeholder = QAction("Keine Presets verfügbar", self)
+                placeholder.setEnabled(False)
+                self.tray_menu.addAction(placeholder)
 
-        self.tray_menu.addSeparator()
+            self.tray_menu.addSeparator()
 
-        show_action = QAction("PromptPilot anzeigen", self)
-        show_action.triggered.connect(self.show_window)
-        self.tray_menu.addAction(show_action)
+            show_action = QAction("PromptPilot anzeigen", self)
+            show_action.triggered.connect(self.show_window)
+            self.tray_menu.addAction(show_action)
 
-        presets_action = QAction("Preset Manager öffnen", self)
-        presets_action.triggered.connect(self.open_preset_manager)
-        self.tray_menu.addAction(presets_action)
+            presets_action = QAction("Preset Manager öffnen", self)
+            presets_action.triggered.connect(self.open_preset_manager)
+            self.tray_menu.addAction(presets_action)
 
-        api_action = QAction("API Einstellungen öffnen", self)
-        api_action.triggered.connect(self.open_api_settings)
-        self.tray_menu.addAction(api_action)
+            api_action = QAction("API Einstellungen öffnen", self)
+            api_action.triggered.connect(self.open_api_settings)
+            self.tray_menu.addAction(api_action)
 
-        self.tray_menu.addSeparator()
+            self.tray_menu.addSeparator()
 
-        quit_action = QAction("Beenden", self)
-        quit_action.triggered.connect(self._quit_from_tray)
-        self.tray_menu.addAction(quit_action)
+            quit_action = QAction("Beenden", self)
+            quit_action.triggered.connect(self._quit_from_tray)
+            self.tray_menu.addAction(quit_action)
+
+        if self.statusbar_app:
+            self.statusbar_app.update_presets()
 
     def _load_tray_icon(self):
         for icon_name in ("icon.icns", "icon.png"):
@@ -778,7 +809,7 @@ class APIManager(QMainWindow):
                 detail = f"Zwischenablage konnte nicht gelesen werden: {exc}"
 
             self.show_toast(toast)
-            self.tray_icon.showMessage(
+            self._notify_tray(
                 "Zwischenablage-Fehler",
                 detail,
                 QSystemTrayIcon.MessageIcon.Critical,
@@ -794,7 +825,7 @@ class APIManager(QMainWindow):
         except Exception as exc:
             message = f"❌ {error_context} konnte nicht kopiert werden: {exc}"
             self.show_toast(message)
-            self.tray_icon.showMessage(
+            self._notify_tray(
                 "Zwischenablage-Fehler",
                 message,
                 QSystemTrayIcon.MessageIcon.Critical,
@@ -1007,11 +1038,11 @@ class APIManager(QMainWindow):
     def create_top_nav(self):
         self.top_nav = QWidget()
         self.top_nav.setObjectName("top_nav")
-        self.top_nav.setFixedHeight(60)
+        self.top_nav.setFixedHeight(64)
 
         layout = QHBoxLayout(self.top_nav)
-        layout.setContentsMargins(32, 0, 32, 0)
-        layout.setSpacing(16)
+        layout.setContentsMargins(24, 8, 24, 8)
+        layout.setSpacing(20)
 
         title = QLabel("PromptPilot")
         title.setObjectName("app_title")
@@ -1058,13 +1089,13 @@ class APIManager(QMainWindow):
         self.sidebar.setFixedWidth(260)
 
         layout = QVBoxLayout(self.sidebar)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
 
         nav_container = QWidget()
         nav_layout = QVBoxLayout(nav_container)
-        nav_layout.setContentsMargins(20, 24, 20, 24)
-        nav_layout.setSpacing(8)
+        nav_layout.setContentsMargins(16, 20, 16, 20)
+        nav_layout.setSpacing(10)
 
         nav_label = QLabel("NAVIGATION")
         nav_label.setObjectName("nav_label")
@@ -1365,7 +1396,7 @@ class APIManager(QMainWindow):
 
         if preset_index < 0 or preset_index >= len(self.backend.presets):
             self.show_toast("❌ Preset nicht gefunden")
-            self.tray_icon.showMessage(
+            self._notify_tray(
                 "Preset nicht gefunden",
                 f"Der Shortcut {format_shortcut_for_display(shortcut_key)} verweist auf ein unbekanntes Preset.",
                 QSystemTrayIcon.MessageIcon.Critical,
@@ -1386,7 +1417,7 @@ class APIManager(QMainWindow):
             self.show_toast(f"ℹ️ Zwischenablage ist leer")
             print(f"[DEBUG] Zwischenablage ist leer")
             # Zeige System-Benachrichtigung
-            self.tray_icon.showMessage(
+            self._notify_tray(
                 "Zwischenablage leer",
                 f"Kopiere zuerst einen Text, dann drücke {format_shortcut_for_display(shortcut_key)}",
                 QSystemTrayIcon.MessageIcon.Warning,
@@ -1439,7 +1470,7 @@ class APIManager(QMainWindow):
                 shortcut_info = ""
                 if triggered_shortcut:
                     shortcut_info = f" ({format_shortcut_for_display(triggered_shortcut)})"
-                self.tray_icon.showMessage(
+                self._notify_tray(
                     "✅ Preset abgeschlossen",
                     f"'{preset['name']}'{shortcut_info} wurde erfolgreich ausgeführt. Ergebnis befindet sich in der Zwischenablage.",
                     QSystemTrayIcon.MessageIcon.Information,
@@ -1454,7 +1485,7 @@ class APIManager(QMainWindow):
                 shortcut_info = ""
                 if triggered_shortcut:
                     shortcut_info = f" ({format_shortcut_for_display(triggered_shortcut)})"
-                self.tray_icon.showMessage(
+                self._notify_tray(
                     "❌ Preset fehlgeschlagen",
                     f"'{preset['name']}'{shortcut_info} konnte nicht ausgeführt werden: {error_msg}",
                     QSystemTrayIcon.MessageIcon.Critical,
@@ -2249,6 +2280,13 @@ def launch_app():
 
     window = APIManager()
     window.hide()
+
+    status_app = None
+    if PLATFORM == "mac":
+        from mac_statusbar import MacStatusBarApp  # lazy import to avoid platform issues
+
+        status_app = MacStatusBarApp(window.backend, window)
+        window.attach_statusbar_app(status_app)
 
     return app.exec()
 

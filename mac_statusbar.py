@@ -23,15 +23,16 @@ class _PresetExecutionSignals(QObject):
 class _PresetExecutionTask(QRunnable):
     """Runs a preset execution in a background thread."""
 
-    def __init__(self, backend: "APIBackend", preset_name: str):
+    def __init__(self, backend: "APIBackend", preset_name: str, clipboard_text: str):
         super().__init__()
         self._backend = backend
         self._preset_name = preset_name
+        self._clipboard_text = clipboard_text
         self.signals = _PresetExecutionSignals()
 
     def run(self) -> None:  # pragma: no cover - executed in separate thread
         try:
-            result = self._backend.execute_preset(self._preset_name, "")
+            result = self._backend.execute_preset(self._preset_name, self._clipboard_text)
             self.signals.finished.emit(self._preset_name, result)
         except Exception as exc:  # pragma: no cover - defensive fallback
             self.signals.failed.emit(self._preset_name, str(exc))
@@ -55,6 +56,10 @@ class MacStatusBarApp(QObject):
 
         self.update_presets()
 
+    @property
+    def tray_icon(self) -> QSystemTrayIcon:
+        return self._tray
+
     # ------------------------------------------------------------------
     def update_presets(self) -> None:
         self._menu.clear()
@@ -73,7 +78,7 @@ class MacStatusBarApp(QObject):
 
         self._menu.addSeparator()
 
-        settings_action = QAction("Einstellungen öffnen", self._menu)
+        settings_action = QAction("Einstellungen", self._menu)
         settings_action.triggered.connect(self._open_settings)
         self._menu.addAction(settings_action)
 
@@ -83,7 +88,25 @@ class MacStatusBarApp(QObject):
 
     # ------------------------------------------------------------------
     def _handle_preset_selection(self, preset_name: str) -> None:
-        task = _PresetExecutionTask(self._backend, preset_name)
+        clipboard = QApplication.clipboard()
+        if clipboard is None:
+            self._notify(
+                "PromptPilot",
+                "Zwischenablage ist nicht verfügbar.",
+                QSystemTrayIcon.Critical,
+            )
+            return
+
+        text = clipboard.text() or ""
+        if not text.strip():
+            self._notify(
+                "PromptPilot",
+                "Zwischenablage ist leer.",
+                QSystemTrayIcon.Warning,
+            )
+            return
+
+        task = _PresetExecutionTask(self._backend, preset_name, text)
         self._pending_tasks.add(task)
         task.signals.finished.connect(
             lambda name, result, task=task: self._handle_execution_result(task, name, result)
@@ -127,7 +150,7 @@ class MacStatusBarApp(QObject):
             app.quit()
 
     def _handle_activation(self, reason: QSystemTrayIcon.ActivationReason) -> None:
-        if reason in {QSystemTrayIcon.Trigger, QSystemTrayIcon.Context}:
+        if reason in {QSystemTrayIcon.Trigger, QSystemTrayIcon.Context, QSystemTrayIcon.DoubleClick}:
             self._menu.popup(QCursor.pos())
 
     def _load_icon(self) -> QIcon:

@@ -3,12 +3,15 @@ from __future__ import annotations
 
 from typing import Callable, Dict, Optional
 
-try:
-    from pynput import keyboard
-except Exception:  # pragma: no cover - pynput may be unavailable in some envs
-    keyboard = None  # type: ignore
-
 from backend import get_platform
+
+if get_platform() == "windows":
+    try:
+        from pynput import keyboard
+    except Exception:  # pragma: no cover - pynput may be unavailable in some envs
+        keyboard = None  # type: ignore
+else:  # pragma: no cover - hotkeys disabled on non-Windows systems
+    keyboard = None  # type: ignore
 
 
 class GlobalHotkeyManager:
