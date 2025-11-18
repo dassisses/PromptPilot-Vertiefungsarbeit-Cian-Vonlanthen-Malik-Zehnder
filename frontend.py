@@ -262,7 +262,7 @@ class PromptPilotWindow(QMainWindow):
 
     def _build_ui(self) -> None:
         self.setWindowTitle("PromptPilot")
-        self.setMinimumSize(640, 420)
+        self.setMinimumSize(660, 440)
         self.setStyleSheet(
             """
             QMainWindow { background: #f5f5f7; }
@@ -294,15 +294,17 @@ class PromptPilotWindow(QMainWindow):
         self.setCentralWidget(central)
 
         layout = QVBoxLayout(central)
-        layout.setContentsMargins(32, 32, 32, 32)
-        layout.setSpacing(18)
+        layout.setContentsMargins(36, 36, 36, 36)
+        layout.setSpacing(24)
 
         header_row = QHBoxLayout()
+        header_row.setSpacing(16)
         title = QLabel("PromptPilot")
         title.setObjectName("TitleLabel")
         subtitle = QLabel("Kurze, klare Eingaben für deine Presets")
         subtitle.setStyleSheet("color: #6e6e73;")
         header_left = QVBoxLayout()
+        header_left.setSpacing(4)
         header_left.addWidget(title)
         header_left.addWidget(subtitle)
         header_row.addLayout(header_left, 1)
@@ -314,6 +316,7 @@ class PromptPilotWindow(QMainWindow):
         layout.addLayout(header_row)
 
         combo_container = QVBoxLayout()
+        combo_container.setSpacing(6)
         combo_label = QLabel("Preset")
         combo_label.setStyleSheet("color: #6e6e73;")
         self.preset_combo = QComboBox()
@@ -323,6 +326,7 @@ class PromptPilotWindow(QMainWindow):
         layout.addLayout(combo_container)
 
         input_container = QVBoxLayout()
+        input_container.setSpacing(6)
         input_label = QLabel("Eingabe")
         input_label.setStyleSheet("color: #6e6e73;")
         self.prompt_edit = QTextEdit()
