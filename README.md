@@ -9,7 +9,7 @@ Dieser Ordner enthält die PromptPilot-Desktop-App. Ausführliche Informationen 
 ./scripts/install.sh
 
 # Anwendung starten
-./scripts/start.sh
+./scripts/start.sh  # oder python3 main.py
 ```
 
 Weitere Hilfsskripte befinden sich im Ordner [`scripts/`](scripts/).

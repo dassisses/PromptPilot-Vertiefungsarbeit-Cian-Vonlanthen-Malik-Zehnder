@@ -1,9 +1,20 @@
 import json
 import os
+import platform
 import sys
 from typing import Dict, List
 
 import openai
+
+
+def get_platform() -> str:
+    """Return the normalized platform identifier."""
+    system = platform.system().lower()
+    if "windows" in system:
+        return "windows"
+    if "darwin" in system or "mac" in system:
+        return "mac"
+    return "linux"
 
 
 def resource_path(filename: str) -> str:

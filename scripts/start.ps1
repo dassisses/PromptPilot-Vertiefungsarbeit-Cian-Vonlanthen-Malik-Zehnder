@@ -12,4 +12,4 @@ if (-not (Test-Path $PythonExe)) {
 
 & "$VenvDir\Scripts\activate.ps1"
 Set-Location $ProjectRoot
-& $PythonExe (Join-Path $ProjectRoot 'frontend.py')
+& $PythonExe (Join-Path $ProjectRoot 'main.py')
