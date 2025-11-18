@@ -1,3 +1,4 @@
+import os
 import sys
 import pyperclip
 import threading
@@ -10,7 +11,7 @@ except Exception:
     PYNPUT_AVAILABLE = False
 
 from PySide6.QtCore import Qt, QTimer, QEvent
-from PySide6.QtGui import QFont, QAction, QKeySequence, QPalette, QColor
+from PySide6.QtGui import QFont, QAction, QKeySequence, QPalette, QColor, QIcon
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QLineEdit,
     QVBoxLayout, QHBoxLayout, QPushButton, QComboBox,
@@ -18,7 +19,7 @@ from PySide6.QtWidgets import (
     QTextEdit, QDialog, QSplitter, QKeySequenceEdit,
     QSystemTrayIcon, QMenu, QStyle
 )
-from backend import APIBackend
+from backend import APIBackend, resource_path
 
 
 MAC_ACCESSIBILITY_TRUSTED = True
@@ -563,21 +564,10 @@ class APIManager(QMainWindow):
         self.visibility_shortcut_parsed = None
         self.visibility_shortcut_raw = None
 
-        # Tray Icon Setup
-        self.tray_icon = QSystemTrayIcon(self)
-        self.tray_icon.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon))
-
-        tray_menu = QMenu()
-        restore_action = QAction("Wiederherstellen", self)
-        restore_action.triggered.connect(self.show)
-        tray_menu.addAction(restore_action)
-
-        quit_action = QAction("Beenden", self)
-        quit_action.triggered.connect(QApplication.instance().quit)
-        tray_menu.addAction(quit_action)
-
-        self.tray_icon.setContextMenu(tray_menu)
-        self.tray_icon.show()
+        self._is_quitting = False
+        self._close_to_tray_notified = False
+        self.tray_icon = None
+        self.tray_menu = None
 
         # Theme initialisieren (dark/light) aus Backend-Einstellungen
         self.current_theme = self.backend.get_setting('theme', 'dark')
@@ -638,9 +628,122 @@ class APIManager(QMainWindow):
             # Start listener if es bereits registrierte Shortcuts gibt
             self._update_pynput_listener()
 
+        self._tray_boot_message_shown = False
+        self._setup_tray_icon()
+
     def start_hotkey_listener(self):
         """(deprecated) kept for compatibility"""
         pass
+
+    def closeEvent(self, event):
+        if self._is_quitting:
+            super().closeEvent(event)
+            return
+        if self.tray_icon and self.tray_icon.isVisible():
+            event.ignore()
+            self.hide()
+            if not self._close_to_tray_notified:
+                self.tray_icon.showMessage(
+                    "PromptPilot",
+                    "PromptPilot läuft weiter in der Statusleiste.",
+                    QSystemTrayIcon.MessageIcon.Information,
+                    4500,
+                )
+                self._close_to_tray_notified = True
+        else:
+            super().closeEvent(event)
+
+    # ------------------------------------------------------------------
+    # Status bar / tray helpers
+    def _setup_tray_icon(self):
+        icon = self._load_tray_icon()
+        self.tray_icon = QSystemTrayIcon(icon, self)
+        self.tray_icon.setToolTip("PromptPilot läuft im Hintergrund")
+        self.tray_menu = QMenu()
+        self.tray_icon.setContextMenu(self.tray_menu)
+        self.tray_icon.activated.connect(self._handle_tray_activation)
+        self.refresh_tray_menu()
+        self.tray_icon.show()
+        if not self._tray_boot_message_shown:
+            self.tray_icon.showMessage(
+                "PromptPilot",
+                "PromptPilot läuft im Hintergrund. Über das Statusleisten-Symbol kannst du Presets und Einstellungen öffnen.",
+                QSystemTrayIcon.MessageIcon.Information,
+                6000,
+            )
+            self._tray_boot_message_shown = True
+
+    def refresh_tray_menu(self):
+        if not self.tray_menu:
+            return
+        self.tray_menu.clear()
+        presets = list(self.backend.presets)
+        if presets:
+            for idx, preset in enumerate(presets):
+                action = QAction(preset["name"], self)
+                action.triggered.connect(lambda _checked=False, i=idx: self.execute_preset_by_index(i))
+                self.tray_menu.addAction(action)
+        else:
+            placeholder = QAction("Keine Presets verfügbar", self)
+            placeholder.setEnabled(False)
+            self.tray_menu.addAction(placeholder)
+
+        self.tray_menu.addSeparator()
+
+        show_action = QAction("PromptPilot anzeigen", self)
+        show_action.triggered.connect(self.show_window)
+        self.tray_menu.addAction(show_action)
+
+        presets_action = QAction("Preset Manager öffnen", self)
+        presets_action.triggered.connect(self.open_preset_manager)
+        self.tray_menu.addAction(presets_action)
+
+        api_action = QAction("API Einstellungen öffnen", self)
+        api_action.triggered.connect(self.open_api_settings)
+        self.tray_menu.addAction(api_action)
+
+        self.tray_menu.addSeparator()
+
+        quit_action = QAction("Beenden", self)
+        quit_action.triggered.connect(self._quit_from_tray)
+        self.tray_menu.addAction(quit_action)
+
+    def _load_tray_icon(self):
+        for icon_name in ("icon.icns", "icon.png"):
+            icon_path = resource_path(icon_name)
+            if os.path.exists(icon_path):
+                icon = QIcon(icon_path)
+                if not icon.isNull():
+                    return icon
+        return self.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
+
+    def _handle_tray_activation(self, reason):
+        if reason in {QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick}:
+            self.show_window()
+
+    def _quit_from_tray(self):
+        self._is_quitting = True
+        app = QApplication.instance()
+        if app:
+            app.quit()
+
+    # Public helpers used by status bar integrations
+    def show_window(self):
+        self.show()
+        self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
+        self.raise_()
+        self.activateWindow()
+
+    def open_preset_manager(self):
+        self.show_window()
+        self.change_page(0)
+
+    def open_api_settings(self):
+        self.show_window()
+        self.change_page(1)
+
+    def open_settings(self):
+        self.open_api_settings()
 
     def trigger_preset_by_index(self, index, shortcut_key: Optional[str] = None):
         """Safely trigger preset execution on the Qt main thread from background threads."""
@@ -1841,6 +1944,8 @@ class HomePage(BasePage):
                 self.controller.show_toast(f"Preset '{name}' gespeichert")
             self.clear_form()
             self.update_presets_list()
+            if hasattr(self.controller, "refresh_tray_menu"):
+                self.controller.refresh_tray_menu()
         else:
             if hasattr(self.controller, 'show_toast'):
                 self.controller.show_toast("Fehler: Preset konnte nicht gespeichert werden (evtl. Name bereits vorhanden)")
@@ -1983,6 +2088,8 @@ class HomePage(BasePage):
                     if hasattr(self.controller, 'show_toast'):
                         self.controller.show_toast(f"Preset '{data['name']}' aktualisiert")
                     self.update_presets_list()
+                    if hasattr(self.controller, "refresh_tray_menu"):
+                        self.controller.refresh_tray_menu()
                 else:
                     if hasattr(self.controller, 'show_toast'):
                         self.controller.show_toast("Fehler beim Aktualisieren")
@@ -2001,6 +2108,8 @@ class HomePage(BasePage):
                     if hasattr(self.controller, 'reload_shortcuts'):
                         self.controller.reload_shortcuts()
                     self.update_presets_list()
+                    if hasattr(self.controller, "refresh_tray_menu"):
+                        self.controller.refresh_tray_menu()
                 else:
                     if hasattr(self.controller, 'show_toast'):
                         self.controller.show_toast("Fehler beim Löschen")
@@ -2134,11 +2243,12 @@ def launch_app():
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName("PromptPilot")
     app.setOrganizationName("Cian & Malik")
+    app.setQuitOnLastWindowClosed(False)
 
     refresh_app_font_family()
 
     window = APIManager()
-    window.show()
+    window.hide()
 
     return app.exec()
 
