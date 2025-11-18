@@ -44,7 +44,6 @@ def _is_process_trusted() -> bool:
 # New UI / behavior constants
 MAX_PRESET_NAME_LENGTH = 30  # displayed length before truncation
 MAX_PRESET_NAME_STORE = 60   # max length allowed for storing names
-EDIT_BUTTON_COLOR = "#7c3aed"  # violet-ish instead of yellow for the edit button
 
 
 MODIFIER_ORDER = ("Ctrl", "Meta", "Alt", "AltGr", "Shift")
@@ -231,7 +230,12 @@ MODIFIER_KEY_DISPLAY = "⌘" if sys.platform == "darwin" else "Ctrl"
 # NOTE: Accessing QFont/QFontDatabase before a QApplication exists causes
 # "QFontDatabase: Must construct a QGuiApplication" errors.  We therefore use a
 # static fallback that is updated once the QApplication is created.
-APP_FONT_FAMILY = "Sans Serif"
+APP_FONT_FAMILY = "SF Pro Text"
+
+# Layout baseline values for consistent macOS-inspired spacing
+OUTER_MARGIN = 24
+SECTION_SPACING = 16
+CONTROL_SPACING = 12
 
 
 def refresh_app_font_family() -> None:
@@ -257,6 +261,17 @@ def refresh_app_font_family() -> None:
     except Exception:
         # If we cannot query Qt for a font we simply keep the fallback.
         pass
+
+
+def create_section_divider() -> QFrame:
+    """Return a subtle horizontal divider for separating logical sections."""
+
+    divider = QFrame()
+    divider.setObjectName("section_divider")
+    divider.setFrameShape(QFrame.Shape.HLine)
+    divider.setFrameShadow(QFrame.Shadow.Plain)
+    divider.setFixedHeight(1)
+    return divider
 
 
 class EditPresetDialog(QDialog):
@@ -589,8 +604,8 @@ class APIManager(QMainWindow):
         self.setCentralWidget(self.central_widget)
 
         main_layout = QVBoxLayout(self.central_widget)
-        main_layout.setContentsMargins(12, 12, 12, 12)
-        main_layout.setSpacing(12)
+        main_layout.setContentsMargins(OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN)
+        main_layout.setSpacing(SECTION_SPACING)
 
         self.create_top_nav()
         main_layout.addWidget(self.top_nav)
@@ -598,7 +613,7 @@ class APIManager(QMainWindow):
         content_container = QWidget()
         content_layout = QHBoxLayout(content_container)
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(12)
+        content_layout.setSpacing(SECTION_SPACING)
 
         self.create_sidebar()
         content_layout.addWidget(self.sidebar)
@@ -1041,8 +1056,8 @@ class APIManager(QMainWindow):
         self.top_nav.setFixedHeight(64)
 
         layout = QHBoxLayout(self.top_nav)
-        layout.setContentsMargins(24, 8, 24, 8)
-        layout.setSpacing(20)
+        layout.setContentsMargins(24, 12, 24, 12)
+        layout.setSpacing(SECTION_SPACING)
 
         title = QLabel("PromptPilot")
         title.setObjectName("app_title")
@@ -1089,13 +1104,13 @@ class APIManager(QMainWindow):
         self.sidebar.setFixedWidth(260)
 
         layout = QVBoxLayout(self.sidebar)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(12)
+        layout.setContentsMargins(18, 20, 18, 20)
+        layout.setSpacing(SECTION_SPACING)
 
         nav_container = QWidget()
         nav_layout = QVBoxLayout(nav_container)
-        nav_layout.setContentsMargins(16, 20, 16, 20)
-        nav_layout.setSpacing(10)
+        nav_layout.setContentsMargins(16, 18, 16, 18)
+        nav_layout.setSpacing(CONTROL_SPACING)
 
         nav_label = QLabel("NAVIGATION")
         nav_label.setObjectName("nav_label")
@@ -1120,7 +1135,7 @@ class APIManager(QMainWindow):
         bottom = QWidget()
         bottom.setObjectName("sidebar_bottom")
         bottom_layout = QVBoxLayout(bottom)
-        bottom_layout.setContentsMargins(20, 16, 20, 16)
+        bottom_layout.setContentsMargins(20, 18, 20, 18)
 
         info = QLabel("PromptPilot v2.0")
         info.setObjectName("sidebar_info")
@@ -1508,140 +1523,149 @@ class APIManager(QMainWindow):
 
     def apply_stylesheets(self, theme='dark'):
         """Wendet Stylesheet und Palette für das gewählte Theme an (dark/light)."""
-        # Farben definieren
-        accent = "#2563eb"  # Primär-Akzent (deeper blue)
-        success = "#2563eb"
-        danger = "#2563eb"
-        warning = "#2563eb"
+        accent = "#007aff"
+        success = "#34c759"
+        danger = "#ff3b30"
+        font_stack = f"'{APP_FONT_FAMILY}', 'SF Pro Text', 'SF Pro Display', '-apple-system', 'Helvetica Neue', 'Segoe UI', sans-serif"
 
         QApplication.setStyle("Fusion")
+        app = QApplication.instance()
 
         if theme == 'dark':
             palette = QPalette()
-            palette.setColor(QPalette.ColorRole.Window, QColor(18, 18, 18))
-            palette.setColor(QPalette.ColorRole.WindowText, QColor(230, 230, 230))
-            palette.setColor(QPalette.ColorRole.Base, QColor(25, 25, 25))
-            palette.setColor(QPalette.ColorRole.AlternateBase, QColor(35, 35, 35))
-            palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(230, 230, 230))
-            palette.setColor(QPalette.ColorRole.ToolTipText, QColor(230, 230, 230))
-            palette.setColor(QPalette.ColorRole.Text, QColor(230, 230, 230))
-            palette.setColor(QPalette.ColorRole.Button, QColor(36, 40, 44))
-            palette.setColor(QPalette.ColorRole.ButtonText, QColor(230, 230, 230))
-            palette.setColor(QPalette.ColorRole.BrightText, QColor(255, 0, 0))
-            palette.setColor(QPalette.ColorRole.Link, QColor(88, 166, 255))
-            palette.setColor(QPalette.ColorRole.Highlight, QColor(88, 166, 255))
+            palette.setColor(QPalette.ColorRole.Window, QColor(28, 28, 30))
+            palette.setColor(QPalette.ColorRole.WindowText, QColor(240, 240, 240))
+            palette.setColor(QPalette.ColorRole.Base, QColor(44, 44, 46))
+            palette.setColor(QPalette.ColorRole.AlternateBase, QColor(58, 58, 60))
+            palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(240, 240, 240))
+            palette.setColor(QPalette.ColorRole.ToolTipText, QColor(12, 12, 12))
+            palette.setColor(QPalette.ColorRole.Text, QColor(245, 245, 247))
+            palette.setColor(QPalette.ColorRole.Button, QColor(44, 44, 46))
+            palette.setColor(QPalette.ColorRole.ButtonText, QColor(245, 245, 247))
+            palette.setColor(QPalette.ColorRole.BrightText, QColor(255, 255, 255))
+            palette.setColor(QPalette.ColorRole.Link, QColor(0, 122, 255))
+            palette.setColor(QPalette.ColorRole.Highlight, QColor(0, 122, 255))
             palette.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
-            app = QApplication.instance()
             if app:
                 app.setPalette(palette)
             self.setPalette(palette)
 
-            # Reduziertes, modernes Stylesheet für Dark Mode
             base_styles = f"""
-                QWidget {{ background-color: #0b1120; color: #e2e8f0; font-family: '{APP_FONT_FAMILY}', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }}
-                #top_nav {{ background-color: rgba(15, 23, 42, 0.78); border-bottom: 1px solid rgba(148, 163, 184, 0.18); }}
-                #sidebar {{ background-color: #111c2d; }}
-                #sidebar_info, #sidebar_authors {{ color: #94a3b8; }}
-                QPushButton#nav_button[active="true"] {{ background-color: rgba(99, 102, 241, 0.22); color: #f8fafc; font-weight: 600; border-radius: 10px; }}
-                QPushButton#nav_button {{ background: transparent; border: none; color: #cbd5f5; text-align: left; padding: 10px 14px; border-radius: 10px; }}
-                QPushButton#nav_button:hover {{ background-color: rgba(99, 102, 241, 0.12); }}
-                .content_card, .preset_card, .shortcut_card, #result_panel {{ background-color: rgba(15, 23, 42, 0.72); border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.16); }}
+                QWidget {{ background-color: #1c1c1e; color: #f5f5f7; font-family: {font_stack}; }}
+                #top_nav {{ background-color: rgba(28,28,30,0.92); border-bottom: 1px solid rgba(255,255,255,0.08); border-radius: 18px; }}
+                #top_nav QLabel#app_title {{ color: #f5f5f7; letter-spacing: 0.2px; }}
+                #top_nav_separator {{ background-color: rgba(255,255,255,0.12); width: 1px; }}
+                #sidebar {{ background-color: #2c2c2e; border: 1px solid rgba(255,255,255,0.05); border-radius: 20px; }}
+                #sidebar_info, #sidebar_authors {{ color: rgba(255,255,255,0.55); }}
+                #sidebar_bottom {{ background-color: transparent; border-top: 1px solid rgba(255,255,255,0.06); border-radius: 14px; }}
+                QPushButton#nav_button {{ background: transparent; border: none; color: rgba(255,255,255,0.72); text-align: left; padding: 10px 16px; border-radius: 12px; }}
+                QPushButton#nav_button[active="true"] {{ background-color: rgba(255,255,255,0.12); color: #ffffff; font-weight: 600; }}
+                QPushButton#nav_button:hover {{ background-color: rgba(255,255,255,0.08); }}
+                .content_card, .preset_card, .shortcut_card, #result_panel {{ background-color: rgba(44,44,46,0.9); border-radius: 18px; border: 1px solid rgba(255,255,255,0.08); }}
                 #page_stack {{ background: transparent; }}
-                QPushButton#btn_primary {{ background-color: {accent}; color: #0b1120; border-radius: 12px; padding: 10px 18px; font-weight: 600; }}
-                QPushButton#btn_primary:hover {{ background-color: #4f46e5; color: #f8fafc; }}
-                QPushButton#btn_secondary {{ background-color: rgba(148, 163, 184, 0.18); color: #e2e8f0; border-radius: 12px; padding: 10px 18px; }}
-                QPushButton#btn_secondary:hover {{ background-color: rgba(148, 163, 184, 0.28); }}
-                QPushButton#btn_success {{ background-color: {success}; color: #0b1120; border-radius: 12px; padding: 10px 18px; }}
-                QPushButton#btn_danger {{ background-color: {danger}; color: #0b1120; border-radius: 12px; padding: 10px 18px; }}
-                QPushButton#btn_warning {{ background-color: {warning}; color: #0b1120; border-radius: 12px; padding: 10px 18px; }}
-                QPushButton#btn_ghost {{ background-color: transparent; color: {accent}; border-radius: 10px; padding: 8px 14px; }}
-                QPushButton#btn_ghost:hover {{ background-color: rgba(99, 102, 241, 0.14); }}
-                QLineEdit, QTextEdit, QComboBox, QKeySequenceEdit {{ background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(148, 163, 184, 0.24); color: #f1f5f9; border-radius: 12px; selection-background-color: {accent}; }}
+                QPushButton#btn_primary {{ background-color: {accent}; color: #ffffff; }}
+                QPushButton#btn_primary:hover {{ background-color: #0a84ff; }}
+                QPushButton#btn_secondary {{ background-color: rgba(255,255,255,0.12); color: #f5f5f7; }}
+                QPushButton#btn_secondary:hover {{ background-color: rgba(255,255,255,0.2); }}
+                QPushButton#btn_success {{ background-color: {success}; color: #0b0b0c; }}
+                QPushButton#btn_danger {{ background-color: {danger}; color: #ffffff; }}
+                QPushButton#btn_warning {{ background-color: rgba(255, 204, 0, 0.3); color: #ffe066; }}
+                QPushButton#btn_ghost {{ background-color: transparent; color: {accent}; padding: 6px 12px; border-radius: 10px; }}
+                QPushButton#btn_ghost:hover {{ background-color: rgba(255,255,255,0.08); }}
+                QLineEdit, QTextEdit, QComboBox, QKeySequenceEdit {{ background: rgba(58,58,60,0.95); border: 1px solid rgba(255,255,255,0.12); color: #f5f5f7; border-radius: 12px; selection-background-color: {accent}; selection-color: #ffffff; }}
                 QLineEdit[error="true"], QTextEdit[error="true"], QKeySequenceEdit[error="true"] {{ border: 1px solid {danger}; }}
-                QLabel#section_title {{ color: #f8fafc; }}
-                QLabel#preset_header {{ color: #f8fafc; font-size: 16px; font-weight: 600; }}
-                QLabel#preset_meta {{ color: #94a3b8; font-size: 12px; }}
-                QLabel#presets_counter {{ color: #94a3b8; font-size: 13px; font-weight: 600; }}
-                QLabel#shortcut_badge {{ background-color: rgba(99, 102, 241, 0.22); color: {accent}; border-radius: 999px; padding: 4px 12px; font-weight: 600; }}
-                QLabel#toast {{ background: rgba(15, 23, 42, 0.92); color: #f8fafc; padding: 10px 18px; border-radius: 12px; }}
-                QLabel#shortcut_key {{ color: #f8fafc; font-family: 'JetBrains Mono', 'SF Mono', monospace; font-weight: 600; }}
-                QLabel#shortcut_desc {{ color: #cbd5f5; }}
-                QWidget#shortcut_item {{ background-color: rgba(15, 23, 42, 0.6); border-radius: 12px; }}
-                QWidget#empty_state {{ background: transparent; color: #94a3b8; }}
+                QLabel#section_title {{ color: #ffffff; }}
+                QLabel#section_subtitle {{ color: rgba(255,255,255,0.65); }}
+                QLabel#input_label {{ color: rgba(255,255,255,0.82); font-weight: 600; letter-spacing: 0.2px; }}
+                QLabel#hint_text {{ color: rgba(255,255,255,0.55); font-size: 13px; }}
+                QLabel#error_label {{ color: {danger}; font-size: 13px; }}
+                QLabel#preset_header {{ color: #ffffff; font-size: 16px; font-weight: 600; }}
+                QLabel#preset_meta, QLabel#presets_counter {{ color: rgba(255,255,255,0.55); font-size: 12px; }}
+                QLabel#preset_prompt {{ color: rgba(255,255,255,0.85); }}
+                QLabel#shortcut_badge {{ background-color: rgba(255,255,255,0.12); color: #ffffff; border-radius: 999px; padding: 4px 12px; font-weight: 600; }}
+                QLabel#toast {{ background: rgba(0,0,0,0.8); color: #ffffff; padding: 12px 20px; border-radius: 14px; font-weight: 600; }}
+                QLabel#shortcut_key {{ color: #f5f5f7; font-family: 'JetBrains Mono', 'SF Mono', monospace; font-weight: 600; }}
+                QLabel#shortcut_desc {{ color: rgba(255,255,255,0.65); }}
+                QWidget#shortcut_item {{ background-color: rgba(58,58,60,0.9); border-radius: 14px; border: 1px solid rgba(255,255,255,0.04); }}
+                QWidget#empty_state {{ background: transparent; color: rgba(255,255,255,0.6); }}
                 QScrollArea#preset_scroll {{ border: none; background: transparent; }}
-                QSplitter::handle:horizontal {{ width: 2px; background: rgba(148, 163, 184, 0.28); }}
-                QKeySequenceEdit#shortcut_input {{ color: #f1f5f9; }}
+                QSplitter::handle:horizontal {{ width: 2px; background: rgba(255,255,255,0.08); }}
+                QKeySequenceEdit#shortcut_input {{ color: #f5f5f7; }}
+                QFrame#section_divider {{ background-color: rgba(255,255,255,0.12); max-height: 1px; min-height: 1px; }}
             """
         else:
             palette = QPalette()
-            palette.setColor(QPalette.ColorRole.Window, QColor(250, 250, 250))
-            palette.setColor(QPalette.ColorRole.WindowText, QColor(20, 20, 20))
-            palette.setColor(QPalette.ColorRole.Base, QColor(245, 245, 245))
-            palette.setColor(QPalette.ColorRole.AlternateBase, QColor(235, 235, 235))
-            palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(20, 20, 20))
-            palette.setColor(QPalette.ColorRole.ToolTipText, QColor(20, 20, 20))
-            palette.setColor(QPalette.ColorRole.Text, QColor(20, 20, 20))
-            palette.setColor(QPalette.ColorRole.Button, QColor(240, 240, 240))
-            palette.setColor(QPalette.ColorRole.ButtonText, QColor(20, 20, 20))
-            palette.setColor(QPalette.ColorRole.BrightText, QColor(255, 0, 0))
-            palette.setColor(QPalette.ColorRole.Link, QColor(8, 88, 166))
-            palette.setColor(QPalette.ColorRole.Highlight, QColor(8, 88, 166))
+            palette.setColor(QPalette.ColorRole.Window, QColor(245, 246, 248))
+            palette.setColor(QPalette.ColorRole.WindowText, QColor(28, 28, 30))
+            palette.setColor(QPalette.ColorRole.Base, QColor(255, 255, 255))
+            palette.setColor(QPalette.ColorRole.AlternateBase, QColor(242, 242, 247))
+            palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(255, 255, 255))
+            palette.setColor(QPalette.ColorRole.ToolTipText, QColor(28, 28, 30))
+            palette.setColor(QPalette.ColorRole.Text, QColor(28, 28, 30))
+            palette.setColor(QPalette.ColorRole.Button, QColor(255, 255, 255))
+            palette.setColor(QPalette.ColorRole.ButtonText, QColor(28, 28, 30))
+            palette.setColor(QPalette.ColorRole.BrightText, QColor(0, 0, 0))
+            palette.setColor(QPalette.ColorRole.Link, QColor(0, 122, 255))
+            palette.setColor(QPalette.ColorRole.Highlight, QColor(0, 122, 255))
             palette.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
-            app = QApplication.instance()
             if app:
                 app.setPalette(palette)
             self.setPalette(palette)
 
             base_styles = f"""
-                QWidget {{ background-color: #f8fafc; color: #0f172a; font-family: '{APP_FONT_FAMILY}', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }}
-                #top_nav {{ background-color: rgba(255,255,255,0.96); border-bottom: 1px solid rgba(15, 23, 42, 0.08); }}
-                #sidebar {{ background-color: #ffffff; }}
-                #sidebar_info, #sidebar_authors {{ color: #64748b; }}
-                QPushButton#nav_button[active="true"] {{ background-color: rgba(99, 102, 241, 0.2); color: #1e1b4b; font-weight: 600; border-radius: 10px; }}
-                QPushButton#nav_button {{ background: transparent; border: none; color: #334155; text-align: left; padding: 10px 14px; border-radius: 10px; }}
-                QPushButton#nav_button:hover {{ background-color: rgba(148, 163, 184, 0.22); }}
-                .content_card, .preset_card, .shortcut_card, #result_panel {{ background-color: #ffffff; border-radius: 16px; border: 1px solid rgba(15, 23, 42, 0.08); }}
+                QWidget {{ background-color: #f5f5f7; color: #1c1c1e; font-family: {font_stack}; }}
+                #top_nav {{ background-color: rgba(255,255,255,0.9); border-bottom: 1px solid rgba(60,60,67,0.12); border-radius: 18px; }}
+                #top_nav QLabel#app_title {{ color: #1c1c1e; letter-spacing: 0.2px; }}
+                #top_nav_separator {{ background-color: rgba(60,60,67,0.18); width: 1px; }}
+                #sidebar {{ background-color: #ffffff; border: 1px solid rgba(60,60,67,0.12); border-radius: 20px; }}
+                #sidebar_info, #sidebar_authors {{ color: rgba(60,60,67,0.6); }}
+                #sidebar_bottom {{ background-color: rgba(250,250,252,0.8); border-top: 1px solid rgba(60,60,67,0.08); border-radius: 14px; }}
+                QPushButton#nav_button {{ background: transparent; border: none; color: rgba(28,28,30,0.8); text-align: left; padding: 10px 16px; border-radius: 12px; }}
+                QPushButton#nav_button[active="true"] {{ background-color: rgba(0,122,255,0.12); color: #0a84ff; font-weight: 600; }}
+                QPushButton#nav_button:hover {{ background-color: rgba(0,0,0,0.05); }}
+                .content_card, .preset_card, .shortcut_card, #result_panel {{ background-color: #ffffff; border-radius: 18px; border: 1px solid rgba(60,60,67,0.12); }}
                 #page_stack {{ background: transparent; }}
-                QPushButton#btn_primary {{ background-color: {accent}; color: #f8fafc; border-radius: 12px; padding: 10px 18px; font-weight: 600; }}
-                QPushButton#btn_primary:hover {{ background-color: #4f46e5; }}
-                QPushButton#btn_secondary {{ background-color: rgba(148, 163, 184, 0.24); color: #0f172a; border-radius: 12px; padding: 10px 18px; }}
-                QPushButton#btn_secondary:hover {{ background-color: rgba(148, 163, 184, 0.32); }}
-                QPushButton#btn_success {{ background-color: {success}; color: #0f172a; border-radius: 12px; padding: 10px 18px; }}
-                QPushButton#btn_danger {{ background-color: {danger}; color: #f8fafc; border-radius: 12px; padding: 10px 18px; }}
-                QPushButton#btn_warning {{ background-color: {warning}; color: #0f172a; border-radius: 12px; padding: 10px 18px; }}
-                QPushButton#btn_ghost {{ background-color: transparent; color: {accent}; border-radius: 10px; padding: 8px 14px; }}
-                QPushButton#btn_ghost:hover {{ background-color: rgba(99, 102, 241, 0.12); color: #1e1b4b; }}
-                QLineEdit, QTextEdit, QComboBox, QKeySequenceEdit {{ background: #ffffff; border: 1px solid rgba(148, 163, 184, 0.35); color: #0f172a; border-radius: 12px; selection-background-color: {accent}; }}
+                QPushButton#btn_primary {{ background-color: {accent}; color: #ffffff; }}
+                QPushButton#btn_primary:hover {{ background-color: #0a84ff; }}
+                QPushButton#btn_secondary {{ background-color: rgba(60,60,67,0.08); color: #1c1c1e; }}
+                QPushButton#btn_secondary:hover {{ background-color: rgba(60,60,67,0.14); }}
+                QPushButton#btn_success {{ background-color: {success}; color: #ffffff; }}
+                QPushButton#btn_danger {{ background-color: {danger}; color: #ffffff; }}
+                QPushButton#btn_warning {{ background-color: rgba(255,149,0,0.28); color: #c93400; }}
+                QPushButton#btn_ghost {{ background-color: transparent; color: {accent}; padding: 6px 12px; border-radius: 10px; }}
+                QPushButton#btn_ghost:hover {{ background-color: rgba(0,122,255,0.08); }}
+                QLineEdit, QTextEdit, QComboBox, QKeySequenceEdit {{ background: #ffffff; border: 1px solid rgba(60,60,67,0.18); color: #1c1c1e; border-radius: 12px; selection-background-color: {accent}; selection-color: #ffffff; }}
                 QLineEdit[error="true"], QTextEdit[error="true"], QKeySequenceEdit[error="true"] {{ border: 1px solid {danger}; }}
-                QLabel#section_title {{ color: #111827; }}
-                QLabel#preset_header {{ color: #0f172a; font-size: 16px; font-weight: 600; }}
-                QLabel#preset_meta {{ color: #6b7280; font-size: 12px; }}
-                QLabel#presets_counter {{ color: #64748b; font-size: 13px; font-weight: 600; }}
-                QLabel#shortcut_badge {{ background-color: rgba(99, 102, 241, 0.16); color: #3730a3; border-radius: 999px; padding: 4px 12px; font-weight: 600; }}
-                QLabel#toast {{ background: rgba(15, 23, 42, 0.92); color: #f8fafc; padding: 10px 18px; border-radius: 12px; }}
-                QLabel#shortcut_key {{ color: #1e293b; font-family: 'JetBrains Mono', 'SF Mono', monospace; font-weight: 600; }}
-                QLabel#shortcut_desc {{ color: #475569; }}
-                QWidget#shortcut_item {{ background-color: rgba(148, 163, 184, 0.2); border-radius: 12px; }}
-                QWidget#empty_state {{ background: transparent; color: #94a3b8; }}
+                QLabel#section_title {{ color: #111; }}
+                QLabel#section_subtitle {{ color: rgba(60,60,67,0.75); }}
+                QLabel#input_label {{ color: rgba(28,28,30,0.9); font-weight: 600; letter-spacing: 0.2px; }}
+                QLabel#hint_text {{ color: rgba(60,60,67,0.6); font-size: 13px; }}
+                QLabel#error_label {{ color: {danger}; font-size: 13px; }}
+                QLabel#preset_header {{ color: #111; font-size: 16px; font-weight: 600; }}
+                QLabel#preset_meta, QLabel#presets_counter {{ color: rgba(60,60,67,0.6); font-size: 12px; }}
+                QLabel#preset_prompt {{ color: rgba(28,28,30,0.78); }}
+                QLabel#shortcut_badge {{ background-color: rgba(0,122,255,0.12); color: #0a84ff; border-radius: 999px; padding: 4px 12px; font-weight: 600; }}
+                QLabel#toast {{ background: rgba(28,28,30,0.85); color: #ffffff; padding: 12px 20px; border-radius: 14px; font-weight: 600; }}
+                QLabel#shortcut_key {{ color: #111; font-family: 'JetBrains Mono', 'SF Mono', monospace; font-weight: 600; }}
+                QLabel#shortcut_desc {{ color: rgba(28,28,30,0.6); }}
+                QWidget#shortcut_item {{ background-color: rgba(0,0,0,0.03); border-radius: 14px; border: 1px solid rgba(60,60,67,0.08); }}
+                QWidget#empty_state {{ background: transparent; color: rgba(60,60,67,0.55); }}
                 QScrollArea#preset_scroll {{ border: none; background: transparent; }}
-                QSplitter::handle:horizontal {{ width: 2px; background: rgba(148, 163, 184, 0.4); }}
-                QKeySequenceEdit#shortcut_input {{ color: #0f172a; }}
+                QSplitter::handle:horizontal {{ width: 2px; background: rgba(60,60,67,0.12); }}
+                QKeySequenceEdit#shortcut_input {{ color: #1c1c1e; }}
+                QFrame#section_divider {{ background-color: rgba(60,60,67,0.15); max-height: 1px; min-height: 1px; }}
             """
 
-        # Gemeinsames Stylesheet-Grundgerüst (Schriftfamilie, allgemeine Rundungen)
         common = f"""
-            * {{ font-family: '{APP_FONT_FAMILY}', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; }}
-            QLineEdit, QComboBox, QTextEdit, QKeySequenceEdit {{ padding: 10px 12px; }}
-            QTextEdit {{ padding: 12px; }}
-            QPushButton {{ border: none; }}
-            QLabel#section_subtitle {{ color: rgba(148, 163, 184, 0.95); font-size: 15px; }}
+            * {{ font-family: {font_stack}; font-size: 13px; }}
+            QPushButton {{ border: none; border-radius: 12px; font-weight: 600; padding: 10px 18px; }}
+            QLineEdit, QComboBox, QTextEdit, QKeySequenceEdit {{ padding: 10px 14px; font-size: 13px; }}
+            QTextEdit {{ padding: 12px 14px; }}
         """
 
-        # Anwenden
         try:
             self.setStyleSheet(base_styles + common)
         except Exception:
-            # Fallback: Mindestens common anwenden
             self.setStyleSheet(common)
 
     @property
@@ -1658,8 +1682,8 @@ class BasePage(QWidget):
         super().__init__(parent)
         self.controller = parent
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(40, 40, 40, 40)
-        self.main_layout.setSpacing(28)
+        self.main_layout.setContentsMargins(OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN)
+        self.main_layout.setSpacing(SECTION_SPACING + 4)
 
 
 class HomePage(BasePage):
@@ -1674,7 +1698,7 @@ class HomePage(BasePage):
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(20)
+        left_layout.setSpacing(SECTION_SPACING)
 
         header_layout = QVBoxLayout()
         header_layout.setSpacing(8)
@@ -1692,12 +1716,12 @@ class HomePage(BasePage):
         library_card = QWidget()
         library_card.setObjectName("content_card")
         library_layout = QVBoxLayout(library_card)
-        library_layout.setSpacing(18)
+        library_layout.setSpacing(SECTION_SPACING)
         library_layout.setContentsMargins(24, 24, 24, 24)
 
         header_row = QHBoxLayout()
         header_row.setContentsMargins(0, 0, 0, 0)
-        header_row.setSpacing(12)
+        header_row.setSpacing(CONTROL_SPACING)
         search_label = QLabel("Suche")
         search_label.setObjectName("input_label")
         header_row.addWidget(search_label)
@@ -1706,6 +1730,7 @@ class HomePage(BasePage):
         self.preset_count_label.setObjectName("presets_counter")
         header_row.addWidget(self.preset_count_label)
         library_layout.addLayout(header_row)
+        library_layout.addWidget(create_section_divider())
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Nach Name oder Prompt suchen...")
@@ -1733,13 +1758,14 @@ class HomePage(BasePage):
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
         right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(20)
+        right_layout.setSpacing(SECTION_SPACING)
 
         # Form zum Erstellen
         form_card = QWidget()
         form_card.setObjectName("content_card")
         form_layout = QVBoxLayout(form_card)
-        form_layout.setSpacing(18)
+        form_layout.setContentsMargins(24, 24, 24, 24)
+        form_layout.setSpacing(SECTION_SPACING)
         form_title = QLabel("Neues Preset erstellen")
         form_title.setObjectName("section_title")
         form_title.setFont(QFont(APP_FONT_FAMILY, 18, QFont.Weight.Bold))
@@ -1772,6 +1798,8 @@ class HomePage(BasePage):
         self.prompt_error_label.hide()
         form_layout.addWidget(self.prompt_error_label)
 
+        form_layout.addWidget(create_section_divider())
+
         api_label = QLabel("API-Typ")
         api_label.setObjectName("input_label")
         form_layout.addWidget(api_label)
@@ -1779,7 +1807,10 @@ class HomePage(BasePage):
         self.api_type_combo.addItems(["ChatGPT", "GPT-4", "GPT-3.5-Turbo"])
         form_layout.addWidget(self.api_type_combo)
 
+        form_layout.addWidget(create_section_divider())
+
         btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(CONTROL_SPACING)
         reset_btn = QPushButton("Zurücksetzen")
         reset_btn.setObjectName("btn_secondary")
         reset_btn.setFixedHeight(44)
@@ -1798,16 +1829,19 @@ class HomePage(BasePage):
         self.result_card = QWidget()
         self.result_card.setObjectName("result_panel")
         result_layout = QVBoxLayout(self.result_card)
-        result_layout.setSpacing(14)
+        result_layout.setContentsMargins(24, 24, 24, 24)
+        result_layout.setSpacing(SECTION_SPACING)
         result_header = QLabel("Ergebnis")
         result_header.setObjectName("section_title")
         result_header.setFont(QFont(APP_FONT_FAMILY, 16, QFont.Weight.Bold))
         result_layout.addWidget(result_header)
+        result_layout.addWidget(create_section_divider())
         self.result_content = QTextEdit()
         self.result_content.setReadOnly(True)
         self.result_content.setPlaceholderText("Das Ergebnis der API-Anfrage wird hier angezeigt...")
         result_layout.addWidget(self.result_content, 1)
         result_btn_layout = QHBoxLayout()
+        result_btn_layout.setSpacing(CONTROL_SPACING)
         clear_result_btn = QPushButton("Löschen")
         clear_result_btn.setObjectName("btn_secondary")
         clear_result_btn.clicked.connect(self.clear_result)
@@ -1985,13 +2019,13 @@ class HomePage(BasePage):
         card = QWidget()
         card.setObjectName("preset_card")
         layout = QVBoxLayout(card)
-        layout.setSpacing(14)
-        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(SECTION_SPACING)
+        layout.setContentsMargins(24, 20, 24, 20)
 
         header = QWidget()
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(16)
+        header_layout.setSpacing(SECTION_SPACING)
 
         title_box = QWidget()
         title_layout = QVBoxLayout(title_box)
@@ -2019,7 +2053,7 @@ class HomePage(BasePage):
         btn_box = QWidget()
         btn_layout_h = QHBoxLayout(btn_box)
         btn_layout_h.setContentsMargins(0, 0, 0, 0)
-        btn_layout_h.setSpacing(8)
+        btn_layout_h.setSpacing(CONTROL_SPACING)
 
         # Shortcut Button
         shortcut_btn = QPushButton("Shortcut")
@@ -2036,7 +2070,6 @@ class HomePage(BasePage):
         edit_btn.setToolTip("Preset bearbeiten")
         edit_btn.setMinimumWidth(110)
         edit_btn.setFixedHeight(40)
-        edit_btn.setStyleSheet(f"background-color: {EDIT_BUTTON_COLOR}; color: white;")
         edit_btn.clicked.connect(lambda idx=index: self.edit_preset(idx))
         btn_layout_h.addWidget(edit_btn)
 
@@ -2177,7 +2210,8 @@ class CredentialsPage(BasePage):
         api_card = QWidget()
         api_card.setObjectName("content_card")
         api_layout = QVBoxLayout(api_card)
-        api_layout.setSpacing(16)
+        api_layout.setContentsMargins(24, 24, 24, 24)
+        api_layout.setSpacing(SECTION_SPACING)
 
         key_label = QLabel("OpenAI API-Key")
         key_label.setObjectName("input_label")
@@ -2191,11 +2225,11 @@ class CredentialsPage(BasePage):
         hint = QLabel("Den API-Key findest du unter: platform.openai.com/api-keys")
         hint.setObjectName("hint_text")
         api_layout.addWidget(hint)
-
-        api_layout.addSpacing(16)
+        api_layout.addWidget(create_section_divider())
 
         # Buttons
         btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(CONTROL_SPACING)
 
         test_btn = QPushButton("Verbindung testen")
         test_btn.setObjectName("btn_secondary")
@@ -2275,6 +2309,7 @@ def launch_app():
     app.setApplicationName("PromptPilot")
     app.setOrganizationName("Cian & Malik")
     app.setQuitOnLastWindowClosed(False)
+    app.setFont(QFont("SF Pro Text", 13))
 
     refresh_app_font_family()
 
