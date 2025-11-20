@@ -123,9 +123,13 @@ class PromptPilotBackend:
             if api_key:
                 try:
                     self.client = openai.OpenAI(api_key=api_key)
-                    return True
+                    return self.client is not None
                 except Exception:
+                    self.client = None
                     return False
+            self.client = None
+            return False
+
         return bool(self._get_api_key(provider))
 
     def _infer_provider_model(self, preset: Dict) -> Tuple[str, str]:
@@ -388,6 +392,8 @@ class PromptPilotBackend:
         return result
 
     def _execute_openai(self, model: str, full_prompt: str) -> Dict[str, str]:
+        if not self.client and not self._init_client("OpenAI"):
+            return {"status": "fail", "message": "Could not initialize OpenAI client. Please check your credentials."}
         try:
             response = self.client.chat.completions.create(
                 model=model,
