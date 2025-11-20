@@ -761,7 +761,7 @@ class APIManager(QMainWindow):
             if presets:
                 for idx, preset in enumerate(presets):
                     action = QAction(preset["name"], self)
-                    action.triggered.connect(lambda _checked=False, i=idx: self.execute_preset_by_index(i))
+                    action.triggered.connect(lambda _checked=False, i=idx: self.execute_preset_by_index(i, source="tray"))
                     self.tray_menu.addAction(action)
             else:
                 placeholder = QAction("Keine Presets verfügbar", self)
@@ -1482,10 +1482,12 @@ class APIManager(QMainWindow):
         self.home_page.show_loading()
         QTimer.singleShot(
             100,
-            lambda p=preset, text=clipboard_text, key=shortcut_key: self._execute_preset_async(p, text, key)
+            lambda p=preset, text=clipboard_text, key=shortcut_key: self._execute_preset_async(
+                p, text, triggered_shortcut=key, source="shortcut"
+            )
         )
 
-    def execute_preset_by_index(self, preset_index):
+    def execute_preset_by_index(self, preset_index, source: Optional[str] = None):
         if preset_index < 0 or preset_index >= len(self.backend.presets):
             self.show_toast("Preset nicht gefunden")
             return
@@ -1501,9 +1503,12 @@ class APIManager(QMainWindow):
 
         self.show_toast(f"Verarbeite mit '{preset['name']}'...")
         self.home_page.show_loading()
-        QTimer.singleShot(100, lambda p=preset, text=clipboard_text: self._execute_preset_async(p, text))
+        QTimer.singleShot(
+            100,
+            lambda p=preset, text=clipboard_text, src=source: self._execute_preset_async(p, text, source=src)
+        )
 
-    def _execute_preset_async(self, preset, clipboard_text, triggered_shortcut: Optional[str] = None):
+    def _execute_preset_async(self, preset, clipboard_text, triggered_shortcut: Optional[str] = None, source: Optional[str] = None):
         """Führt das Preset asynchron aus"""
         print(f"[DEBUG] Starte Preset-Ausführung: {preset['name']}")
         result = self.backend.execute_preset(preset["name"], clipboard_text)
@@ -1517,8 +1522,9 @@ class APIManager(QMainWindow):
             )
             self.home_page.show_result(preset["name"], clipboard_text, response)
 
-            # Show system notification if via Shortcut oder Fenster minimiert
-            if triggered_shortcut or self.isMinimized():
+            # Show system notification if via Shortcut, Tray oder Fenster minimiert
+            should_notify = bool(triggered_shortcut) or self.isMinimized() or source == "tray"
+            if should_notify:
                 shortcut_info = ""
                 if triggered_shortcut:
                     shortcut_info = f" ({format_shortcut_for_display(triggered_shortcut)})"
@@ -1533,7 +1539,8 @@ class APIManager(QMainWindow):
             print(f"[DEBUG] Fehler bei Preset-Ausführung: {error_msg}")
             self.show_toast(f"❌ Fehler: {error_msg}", 3000)
             self.home_page.show_error(error_msg)
-            if triggered_shortcut or self.isMinimized():
+            should_notify = bool(triggered_shortcut) or self.isMinimized() or source == "tray"
+            if should_notify:
                 shortcut_info = ""
                 if triggered_shortcut:
                     shortcut_info = f" ({format_shortcut_for_display(triggered_shortcut)})"
@@ -1620,9 +1627,9 @@ class APIManager(QMainWindow):
                 QLabel#preset_meta, QLabel#presets_counter {{ color: rgba(255,255,255,0.65); font-size: 13px; }}
                 QLabel#preset_prompt {{ color: rgba(255,255,255,0.86); font-size: 13px; }}
                 QLabel#shortcut_badge {{ background-color: rgba(255,255,255,0.12); color: #ffffff; border-radius: 999px; padding: 4px 12px; font-weight: 600; }}
-                QPushButton#shortcut_chip {{ background-color: rgba(255,255,255,0.08); color: #f5f5f7; border-radius: 10px; padding: 6px 12px; font-weight: 700; font-family: 'JetBrains Mono', 'SF Mono', monospace; }}
-                QPushButton#shortcut_chip:hover {{ background-color: rgba(255,255,255,0.14); }}
-                QPushButton#shortcut_chip[empty="true"] {{ border: 1px dashed rgba(255,255,255,0.26); background: transparent; color: rgba(255,255,255,0.85); }}
+                QPushButton#shortcut_chip {{ background-color: rgba(10,132,255,0.18); color: #e4f0ff; border: 1px solid rgba(0,122,255,0.55); border-radius: 10px; padding: 6px 12px; font-weight: 700; font-family: 'JetBrains Mono', 'SF Mono', monospace; }}
+                QPushButton#shortcut_chip:hover {{ background-color: rgba(10,132,255,0.26); color: #ffffff; }}
+                QPushButton#shortcut_chip[empty="true"] {{ border: 1px dashed rgba(255,255,255,0.38); background: transparent; color: rgba(228,240,255,0.9); }}
                 QLabel#toast {{ background: rgba(0,0,0,0.8); color: #ffffff; padding: 12px 20px; border-radius: 14px; font-weight: 600; }}
                 QLabel#shortcut_key {{ color: #f5f5f7; font-family: 'JetBrains Mono', 'SF Mono', monospace; font-weight: 600; }}
                 QLabel#shortcut_desc {{ color: rgba(255,255,255,0.65); }}
@@ -1685,9 +1692,9 @@ class APIManager(QMainWindow):
                 QLabel#preset_meta, QLabel#presets_counter {{ color: rgba(60,60,67,0.65); font-size: 13px; }}
                 QLabel#preset_prompt {{ color: rgba(28,28,30,0.82); font-size: 13px; }}
                 QLabel#shortcut_badge {{ background-color: rgba(0,122,255,0.12); color: #0a84ff; border-radius: 999px; padding: 4px 12px; font-weight: 600; }}
-                QPushButton#shortcut_chip {{ background-color: rgba(0,0,0,0.04); color: #1c1c1e; border-radius: 10px; padding: 6px 12px; font-weight: 700; font-family: 'JetBrains Mono', 'SF Mono', monospace; }}
-                QPushButton#shortcut_chip:hover {{ background-color: rgba(0,122,255,0.08); color: #0a84ff; }}
-                QPushButton#shortcut_chip[empty="true"] {{ border: 1px dashed rgba(60,60,67,0.3); background: transparent; color: rgba(28,28,30,0.75); }}
+                QPushButton#shortcut_chip {{ background-color: rgba(10,132,255,0.12); color: #0a84ff; border: 1px solid rgba(0,122,255,0.35); border-radius: 10px; padding: 6px 12px; font-weight: 700; font-family: 'JetBrains Mono', 'SF Mono', monospace; }}
+                QPushButton#shortcut_chip:hover {{ background-color: rgba(10,132,255,0.2); color: #0060df; }}
+                QPushButton#shortcut_chip[empty="true"] {{ border: 1px dashed rgba(0,122,255,0.35); background: transparent; color: rgba(10,132,255,0.85); }}
                 QLabel#toast {{ background: rgba(28,28,30,0.85); color: #ffffff; padding: 12px 20px; border-radius: 14px; font-weight: 600; }}
                 QLabel#shortcut_key {{ color: #111; font-family: 'JetBrains Mono', 'SF Mono', monospace; font-weight: 600; }}
                 QLabel#shortcut_desc {{ color: rgba(28,28,30,0.6); }}
@@ -2136,13 +2143,6 @@ class HomePage(BasePage):
         meta.setObjectName("preset_meta")
         title_layout.addWidget(meta)
         header_layout.addWidget(title_box, 1)
-
-        options_btn = QPushButton("⋯")
-        options_btn.setObjectName("btn_ghost")
-        options_btn.setFixedSize(32, 32)
-        options_btn.setToolTip("Aktionen für dieses Preset")
-        options_btn.clicked.connect(lambda idx=index: self.edit_preset(idx))
-        header_layout.addWidget(options_btn, 0, Qt.AlignmentFlag.AlignTop)
         layout.addWidget(header)
 
         prompt = preset["prompt"]
