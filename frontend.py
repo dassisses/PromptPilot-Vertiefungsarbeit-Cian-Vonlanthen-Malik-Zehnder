@@ -790,7 +790,7 @@ class APIManager(QMainWindow):
         self.change_page(1)
 
     def open_settings(self):
-        self.open_api_settings()
+        self.open_preset_manager()
 
     def trigger_preset_by_index(self, index, shortcut_key: Optional[str] = None):
         """Safely trigger preset execution on the Qt main thread from background threads."""
