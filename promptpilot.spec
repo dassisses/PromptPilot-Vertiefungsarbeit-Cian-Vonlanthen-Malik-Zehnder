@@ -32,6 +32,7 @@ a = Analysis(
         (os.path.join(PROJECT_ROOT, 'presets.json'), '.'),
         (os.path.join(PROJECT_ROOT, 'settings.json'), '.'),
         (os.path.join(PROJECT_ROOT, 'credentials.json'), '.'),
+        (os.path.join(PROJECT_ROOT, 'promtpilot_icon.png'), 'resources'),
     ],
     hiddenimports=hiddenimports,
     hookspath=[],
