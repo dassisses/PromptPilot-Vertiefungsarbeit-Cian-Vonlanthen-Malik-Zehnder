@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QPushButton, QComboBox,
     QFrame, QScrollArea, QMessageBox, QStackedWidget,
     QTextEdit, QDialog, QSplitter, QKeySequenceEdit,
-    QSystemTrayIcon, QMenu, QStyle
+    QSystemTrayIcon, QMenu, QStyle, QGridLayout
 )
 
 
@@ -1753,12 +1753,12 @@ class HomePage(BasePage):
         library_card = QWidget()
         library_card.setObjectName("content_card")
         library_layout = QVBoxLayout(library_card)
-        library_layout.setSpacing(SECTION_SPACING)
-        library_layout.setContentsMargins(24, 24, 24, 24)
+        library_layout.setSpacing(10)
+        library_layout.setContentsMargins(12, 12, 12, 12)
 
         header_row = QHBoxLayout()
         header_row.setContentsMargins(0, 0, 0, 0)
-        header_row.setSpacing(CONTROL_SPACING)
+        header_row.setSpacing(8)
         search_label = QLabel("Suche")
         search_label.setObjectName("input_label")
         header_row.addWidget(search_label)
@@ -1782,9 +1782,11 @@ class HomePage(BasePage):
         self.presets_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         self.presets_container = QWidget()
-        self.presets_layout = QVBoxLayout(self.presets_container)
-        self.presets_layout.setSpacing(16)
-        self.presets_layout.setContentsMargins(0, 0, 0, 0)
+        self.presets_grid = QGridLayout()
+        self.presets_grid.setHorizontalSpacing(8)
+        self.presets_grid.setVerticalSpacing(8)
+        self.presets_grid.setContentsMargins(2, 4, 2, 6)
+        self.presets_container.setLayout(self.presets_grid)
         self.presets_scroll.setWidget(self.presets_container)
         library_layout.addWidget(self.presets_scroll, 1)
 
@@ -1900,10 +1902,14 @@ class HomePage(BasePage):
         right_layout.addWidget(self.result_card, 1)
 
         self.main_splitter.addWidget(right_widget)
-        self.main_splitter.setStretchFactor(0, 6)
-        self.main_splitter.setStretchFactor(1, 4)
-        self.main_splitter.setSizes([700, 500])
+        self.main_splitter.setStretchFactor(0, 8)
+        self.main_splitter.setStretchFactor(1, 3)
+        self.main_splitter.setSizes([840, 360])
         self.main_layout.addWidget(self.main_splitter)
+
+        self._preset_grid_columns = self.calculate_preset_columns()
+        self.presets_scroll.viewport().installEventFilter(self)
+        self.presets_container.installEventFilter(self)
 
         self.current_search = ""
         self.update_presets_list()
@@ -1995,10 +2001,28 @@ class HomePage(BasePage):
         self.result_card.hide()
 
     # --- Preset-Liste ---
+    def calculate_preset_columns(self) -> int:
+        """Ermittelt die Anzahl Spalten für das Preset-Grid basierend auf der verfügbaren Breite."""
+        spacing = self.presets_grid.horizontalSpacing() or 0
+        if spacing < 0:
+            spacing = 10
+        viewport_width = self.presets_scroll.viewport().width() or self.presets_scroll.width() or 640
+        card_target_width = 200
+        columns = max(1, (viewport_width + spacing) // (card_target_width + spacing))
+        return int(columns)
+
+    def eventFilter(self, obj, event):
+        if obj in (self.presets_scroll.viewport(), self.presets_container) and event.type() == QEvent.Type.Resize:
+            columns = self.calculate_preset_columns()
+            if columns != getattr(self, "_preset_grid_columns", columns):
+                self._preset_grid_columns = columns
+                self.update_presets_list()
+        return super().eventFilter(obj, event)
+
     def update_presets_list(self):
         # Alle Widgets entfernen
-        for i in reversed(range(self.presets_layout.count())):
-            item = self.presets_layout.takeAt(i)
+        while self.presets_grid.count():
+            item = self.presets_grid.takeAt(0)
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
@@ -2032,14 +2056,26 @@ class HomePage(BasePage):
             empty_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
             empty_text.setObjectName("section_subtitle")
             empty_layout.addWidget(empty_text)
-            self.presets_layout.addWidget(empty)
-            self.presets_layout.addStretch()
+            self.presets_grid.addWidget(empty, 0, 0)
+            self.presets_grid.setColumnStretch(0, 1)
+            self.presets_grid.setRowStretch(1, 1)
             return
 
+        columns = max(1, getattr(self, "_preset_grid_columns", 1))
+        row = 0
+        col = 0
         for idx, preset in filtered:
-            self.presets_layout.addWidget(self.create_preset_widget(idx, preset))
+            widget = self.create_preset_widget(idx, preset)
+            widget.setMinimumWidth(200)
+            self.presets_grid.addWidget(widget, row, col)
+            col += 1
+            if col >= columns:
+                row += 1
+                col = 0
 
-        self.presets_layout.addStretch()
+        for c in range(columns):
+            self.presets_grid.setColumnStretch(c, 1)
+        self.presets_grid.setRowStretch(row + 1, 1)
 
     def filter_presets(self, text: str):
         """Filtert die Preset-Liste basierend auf der Sucheingabe."""
@@ -2089,18 +2125,18 @@ class HomePage(BasePage):
         card = QWidget()
         card.setObjectName("preset_card")
         layout = QVBoxLayout(card)
-        layout.setSpacing(SECTION_SPACING)
-        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(8)
+        layout.setContentsMargins(12, 10, 12, 10)
 
         header = QWidget()
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(SECTION_SPACING)
+        header_layout.setSpacing(8)
 
         title_box = QWidget()
         title_layout = QVBoxLayout(title_box)
         title_layout.setContentsMargins(0, 0, 0, 0)
-        title_layout.setSpacing(6)
+        title_layout.setSpacing(2)
         original_name = preset["name"]
         display_name = original_name
         if len(display_name) > MAX_PRESET_NAME_LENGTH:
@@ -2127,14 +2163,14 @@ class HomePage(BasePage):
         btn_box = QWidget()
         btn_layout_h = QHBoxLayout(btn_box)
         btn_layout_h.setContentsMargins(0, 0, 0, 0)
-        btn_layout_h.setSpacing(CONTROL_SPACING)
+        btn_layout_h.setSpacing(6)
 
         # Shortcut Button
         shortcut_btn = QPushButton("Shortcut")
         shortcut_btn.setObjectName("btn_secondary")
         shortcut_btn.setToolTip("Tastenkombination festlegen")
-        shortcut_btn.setMinimumWidth(100)
-        shortcut_btn.setFixedHeight(40)
+        shortcut_btn.setMinimumWidth(68)
+        shortcut_btn.setFixedHeight(30)
         shortcut_btn.clicked.connect(lambda idx=index: self.set_shortcut(idx))
         btn_layout_h.addWidget(shortcut_btn)
 
@@ -2142,16 +2178,16 @@ class HomePage(BasePage):
         edit_btn = QPushButton("Bearbeiten")
         edit_btn.setObjectName("btn_warning")
         edit_btn.setToolTip("Preset bearbeiten")
-        edit_btn.setMinimumWidth(110)
-        edit_btn.setFixedHeight(40)
+        edit_btn.setMinimumWidth(76)
+        edit_btn.setFixedHeight(30)
         edit_btn.clicked.connect(lambda idx=index: self.edit_preset(idx))
         btn_layout_h.addWidget(edit_btn)
 
         # Execute Button
         use_btn = QPushButton("Ausführen")
         use_btn.setObjectName("btn_primary")
-        use_btn.setMinimumWidth(120)
-        use_btn.setFixedHeight(40)
+        use_btn.setMinimumWidth(88)
+        use_btn.setFixedHeight(30)
         use_btn.setToolTip("Preset mit Zwischenablage ausführen")
         use_btn.clicked.connect(lambda idx=index: self.controller.execute_preset_by_index(idx))
         btn_layout_h.addWidget(use_btn)
@@ -2159,8 +2195,8 @@ class HomePage(BasePage):
         # Delete Button
         delete_btn = QPushButton("Löschen")
         delete_btn.setObjectName("btn_danger")
-        delete_btn.setMinimumWidth(95)
-        delete_btn.setFixedHeight(40)
+        delete_btn.setMinimumWidth(68)
+        delete_btn.setFixedHeight(30)
         delete_btn.setToolTip("Preset entfernen")
         delete_btn.clicked.connect(lambda idx=index: self.delete_preset(idx))
         btn_layout_h.addWidget(delete_btn)
@@ -2170,8 +2206,8 @@ class HomePage(BasePage):
 
         prompt = preset["prompt"]
         truncated_prompt = prompt
-        if len(prompt) > 180:
-            truncated_prompt = prompt[:180].rstrip() + "…"
+        if len(prompt) > 120:
+            truncated_prompt = prompt[:120].rstrip() + "…"
 
         prompt_label = QLabel(truncated_prompt)
         prompt_label.setObjectName("preset_prompt")
