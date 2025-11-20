@@ -277,8 +277,9 @@ def create_section_divider() -> QFrame:
 class EditPresetDialog(QDialog):
     """Dialog zum Bearbeiten eines bestehenden Presets"""
 
-    def __init__(self, parent=None, preset_data=None):
+    def __init__(self, parent=None, preset_data=None, provider_models=None):
         super().__init__(parent)
+        self.provider_models = provider_models or {}
         self.setWindowTitle("Preset bearbeiten")
         self.setMinimumWidth(600)
         self.setMinimumHeight(400)
@@ -313,20 +314,47 @@ class EditPresetDialog(QDialog):
             self.prompt_input.setPlainText(preset_data.get("prompt", ""))
         layout.addWidget(self.prompt_input)
 
-        # API Type
-        api_label = QLabel("API-Typ")
-        api_label.setObjectName("input_label")
-        layout.addWidget(api_label)
+        # Provider
+        provider_label = QLabel("Provider")
+        provider_label.setObjectName("input_label")
+        layout.addWidget(provider_label)
 
-        self.api_type_combo = QComboBox()
-        self.api_type_combo.addItems(["ChatGPT", "GPT-4", "GPT-3.5-Turbo"])
-        self.api_type_combo.setMinimumHeight(40)
-        if preset_data:
-            api_type = preset_data.get("api_type", "ChatGPT")
-            index = self.api_type_combo.findText(api_type)
-            if index >= 0:
-                self.api_type_combo.setCurrentIndex(index)
-        layout.addWidget(self.api_type_combo)
+        self.provider_combo = QComboBox()
+        self.provider_combo.setMinimumHeight(40)
+        self.provider_combo.addItems(list(self.provider_models.keys()))
+        self.provider_combo.currentTextChanged.connect(self._update_models)
+        layout.addWidget(self.provider_combo)
+
+        # Model
+        model_label = QLabel("Modell")
+        model_label.setObjectName("input_label")
+        layout.addWidget(model_label)
+
+        self.model_combo = QComboBox()
+        self.model_combo.setMinimumHeight(40)
+        layout.addWidget(self.model_combo)
+
+        provider_value = preset_data.get("provider") if preset_data else None
+        model_value = preset_data.get("model") if preset_data else None
+        fallback_provider = preset_data.get("api_type") if preset_data else None
+        if provider_value and provider_value not in self.provider_models:
+            self.provider_combo.addItem(provider_value)
+        if fallback_provider and fallback_provider not in self.provider_models:
+            self.provider_combo.addItem(fallback_provider)
+
+        if provider_value:
+            idx = self.provider_combo.findText(provider_value)
+            if idx >= 0:
+                self.provider_combo.setCurrentIndex(idx)
+        elif fallback_provider:
+            idx = self.provider_combo.findText(fallback_provider)
+            if idx >= 0:
+                self.provider_combo.setCurrentIndex(idx)
+        self._update_models(self.provider_combo.currentText())
+        if model_value:
+            m_idx = self.model_combo.findText(model_value)
+            if m_idx >= 0:
+                self.model_combo.setCurrentIndex(m_idx)
 
         layout.addSpacing(16)
 
@@ -354,8 +382,16 @@ class EditPresetDialog(QDialog):
         return {
             "name": self.name_input.text().strip(),
             "prompt": self.prompt_input.toPlainText().strip(),
-            "api_type": self.api_type_combo.currentText()
+            "api_type": self.provider_combo.currentText(),
+            "provider": self.provider_combo.currentText(),
+            "model": self.model_combo.currentText(),
         }
+
+    def _update_models(self, provider: str):
+        models = self.provider_models.get(provider, [])
+        self.model_combo.clear()
+        if models:
+            self.model_combo.addItems(models)
 
 
 class ShortcutDialog(QDialog):
@@ -1801,12 +1837,20 @@ class HomePage(BasePage):
 
         form_layout.addWidget(create_section_divider())
 
-        api_label = QLabel("API-Typ")
-        api_label.setObjectName("input_label")
-        form_layout.addWidget(api_label)
-        self.api_type_combo = QComboBox()
-        self.api_type_combo.addItems(["ChatGPT", "GPT-4", "GPT-3.5-Turbo"])
-        form_layout.addWidget(self.api_type_combo)
+        provider_label = QLabel("Provider")
+        provider_label.setObjectName("input_label")
+        form_layout.addWidget(provider_label)
+        self.provider_models_map = self.controller.backend.provider_models()
+        self.provider_combo = QComboBox()
+        self.provider_combo.currentTextChanged.connect(self.on_provider_changed)
+        form_layout.addWidget(self.provider_combo)
+
+        model_label = QLabel("Modell")
+        model_label.setObjectName("input_label")
+        form_layout.addWidget(model_label)
+        self.model_combo = QComboBox()
+        form_layout.addWidget(self.model_combo)
+        self.populate_provider_options()
 
         form_layout.addWidget(create_section_divider())
 
@@ -1896,6 +1940,23 @@ class HomePage(BasePage):
         self.preset_name_input.style().polish(self.preset_name_input)
         self.preset_prompt_input.style().unpolish(self.preset_prompt_input)
         self.preset_prompt_input.style().polish(self.preset_prompt_input)
+
+    def populate_provider_options(self):
+        self.provider_models_map = self.controller.backend.provider_models()
+        providers = list(self.provider_models_map.keys()) or ["OpenAI"]
+        self.provider_combo.blockSignals(True)
+        self.provider_combo.clear()
+        self.provider_combo.addItems(providers)
+        self.provider_combo.blockSignals(False)
+        self.on_provider_changed(self.provider_combo.currentText())
+
+    def on_provider_changed(self, provider: str):
+        models = self.provider_models_map.get(provider, [])
+        self.model_combo.clear()
+        if models:
+            self.model_combo.addItems(models)
+        else:
+            self.model_combo.addItem("")
 
     # --- Preset Verarbeitung / UI ---
     def show_loading(self):
@@ -1989,7 +2050,9 @@ class HomePage(BasePage):
         """Speichert ein neues Preset über das Backend nach Validierung."""
         name = self.preset_name_input.text().strip()
         prompt = self.preset_prompt_input.toPlainText().strip()
-        api_type = self.api_type_combo.currentText()
+        provider = self.provider_combo.currentText() or "OpenAI"
+        model = self.model_combo.currentText() or ""
+        api_type = provider
 
         if not name:
             if hasattr(self.controller, 'show_toast'):
@@ -2004,7 +2067,7 @@ class HomePage(BasePage):
                 self.controller.show_toast("Prompt zu kurz")
             return
 
-        success = self.controller.backend.save_preset(name, prompt, api_type)
+        success = self.controller.backend.save_preset(name, prompt, api_type, provider, model)
         if success:
             if hasattr(self.controller, 'show_toast'):
                 self.controller.show_toast(f"Preset '{name}' gespeichert")
@@ -2015,6 +2078,12 @@ class HomePage(BasePage):
         else:
             if hasattr(self.controller, 'show_toast'):
                 self.controller.show_toast("Fehler: Preset konnte nicht gespeichert werden (evtl. Name bereits vorhanden)")
+
+    def resolve_preset_provider_model(self, preset):
+        provider, model = self.controller.backend.resolve_preset_target(preset)
+        if not provider:
+            provider = preset.get("api_type", "")
+        return provider, model or ""
 
     def create_preset_widget(self, index, preset):
         card = QWidget()
@@ -2041,7 +2110,11 @@ class HomePage(BasePage):
         if display_name != original_name:
             title.setToolTip(original_name)
         title_layout.addWidget(title)
-        meta = QLabel(f"API: {preset['api_type']}")
+        provider, model = self.resolve_preset_provider_model(preset)
+        meta_text = provider or preset.get("api_type", "")
+        if model:
+            meta_text = f"{provider} • {model}" if provider else model
+        meta = QLabel(f"API: {meta_text}")
         meta.setObjectName("preset_meta")
         title_layout.addWidget(meta)
         shortcut_value = preset.get("shortcut")
@@ -2142,14 +2215,18 @@ class HomePage(BasePage):
     def edit_preset(self, index):
         if 0 <= index < len(self.controller.presets):
             preset = self.controller.presets[index]
-            dialog = EditPresetDialog(self, preset)
+            provider, model = self.resolve_preset_provider_model(preset)
+            preset_with_defaults = dict(preset)
+            preset_with_defaults.setdefault("provider", provider)
+            preset_with_defaults.setdefault("model", model)
+            dialog = EditPresetDialog(self, preset_with_defaults, provider_models=self.provider_models_map)
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 data = dialog.get_data()
                 if not data["name"] or not data["prompt"]:
                     if hasattr(self.controller, 'show_toast'):
                         self.controller.show_toast("Name und Prompt erforderlich")
                     return
-                if self.controller.backend.update_preset_by_index(index, data["name"], data["prompt"], data["api_type"]):
+                if self.controller.backend.update_preset_by_index(index, data["name"], data["prompt"], data["api_type"], data.get("provider"), data.get("model")):
                     if hasattr(self.controller, 'show_toast'):
                         self.controller.show_toast(f"Preset '{data['name']}' aktualisiert")
                     self.update_presets_list()
@@ -2182,7 +2259,7 @@ class HomePage(BasePage):
     def clear_form(self):
         self.preset_name_input.clear()
         self.preset_prompt_input.clear()
-        self.api_type_combo.setCurrentIndex(0)
+        self.populate_provider_options()
         self.name_error_label.hide()
         self.prompt_error_label.hide()
         self.preset_name_input.setProperty("error", False)
@@ -2202,7 +2279,7 @@ class CredentialsPage(BasePage):
         title.setFont(QFont(APP_FONT_FAMILY, 28, QFont.Weight.Bold))
         self.main_layout.addWidget(title)
 
-        subtitle = QLabel("Konfiguriere deine OpenAI API-Zugangsdaten")
+        subtitle = QLabel("Konfiguriere deine API-Zugangsdaten")
         subtitle.setObjectName("section_subtitle")
         subtitle.setFont(QFont(APP_FONT_FAMILY, 14))
         self.main_layout.addWidget(subtitle)
@@ -2214,16 +2291,25 @@ class CredentialsPage(BasePage):
         api_layout.setContentsMargins(24, 24, 24, 24)
         api_layout.setSpacing(SECTION_SPACING)
 
-        key_label = QLabel("OpenAI API-Key")
+        provider_label = QLabel("Provider")
+        provider_label.setObjectName("input_label")
+        api_layout.addWidget(provider_label)
+
+        self.provider_combo = QComboBox()
+        self.provider_combo.addItems(self.controller.backend.list_providers())
+        self.provider_combo.currentTextChanged.connect(self.load_credentials)
+        api_layout.addWidget(self.provider_combo)
+
+        key_label = QLabel("API-Key")
         key_label.setObjectName("input_label")
         api_layout.addWidget(key_label)
 
         self.api_key_input = QLineEdit()
         self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.api_key_input.setPlaceholderText("sk-...")
+        self.api_key_input.setPlaceholderText("API-Key einfügen")
         api_layout.addWidget(self.api_key_input)
 
-        hint = QLabel("Den API-Key findest du unter: platform.openai.com/api-keys")
+        hint = QLabel("Hinterlege den API-Key deines gewählten Providers.")
         hint.setObjectName("hint_text")
         api_layout.addWidget(hint)
         api_layout.addWidget(create_section_divider())
@@ -2257,23 +2343,25 @@ class CredentialsPage(BasePage):
         self.load_credentials()
 
     def load_credentials(self):
+        provider = self.provider_combo.currentText()
         creds = self.controller.api_credentials
-        if "OpenAI" in creds:
-            self.api_key_input.setText(creds["OpenAI"])
+        key = creds.get(provider)
+        if key:
+            self.api_key_input.setText(key)
             self.status_label.setText("API-Key gespeichert")
             self.status_label.setStyleSheet("color: #3fb950; font-weight: 600;")
+        else:
+            self.api_key_input.clear()
+            self.status_label.setText("")
 
     def save_credentials(self):
         api_key = self.api_key_input.text().strip()
+        provider = self.provider_combo.currentText() or "OpenAI"
         if not api_key:
             self.controller.show_toast("Bitte API-Key eingeben")
             return
 
-        if not api_key.startswith("sk-"):
-            self.controller.show_toast("API-Key sollte mit 'sk-' beginnen")
-            return
-
-        if self.controller.backend.save_credentials(api_key, "OpenAI"):
+        if self.controller.backend.save_credentials(api_key, provider):
             self.controller.show_toast("API-Key gespeichert")
             self.status_label.setText("Gespeichert")
             self.status_label.setStyleSheet("color: #3fb950; font-weight: 600;")
@@ -2282,17 +2370,18 @@ class CredentialsPage(BasePage):
 
     def test_api(self):
         api_key = self.api_key_input.text().strip()
+        provider = self.provider_combo.currentText() or "OpenAI"
         if not api_key:
             self.controller.show_toast("Bitte API-Key eingeben")
             return
 
-        self.controller.backend.save_credentials(api_key, "OpenAI")
+        self.controller.backend.save_credentials(api_key, provider)
 
         self.status_label.setText("Teste Verbindung...")
         self.status_label.setStyleSheet("color: #58a6ff; font-weight: 600;")
         QApplication.processEvents()
 
-        result = self.controller.backend.test_credential("OpenAI")
+        result = self.controller.backend.test_credential(provider)
 
         if result.get("status") == "success":
             self.status_label.setText("Verbindung erfolgreich!")
