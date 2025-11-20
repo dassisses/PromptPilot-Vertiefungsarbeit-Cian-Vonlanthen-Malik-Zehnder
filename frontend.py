@@ -1918,14 +1918,21 @@ class HomePage(BasePage):
         name = self.preset_name_input.text().strip()
         prompt = self.preset_prompt_input.toPlainText().strip()
 
+        valid = True
+        first_error = ""
+
         if not name:
             self.name_error_label.setText("Name ist erforderlich")
             self.name_error_label.show()
             self.preset_name_input.setProperty("error", True)
+            valid = False
+            first_error = first_error or "Name ist erforderlich"
         elif len(name) < 3:
             self.name_error_label.setText("Name muss mindestens 3 Zeichen haben")
             self.name_error_label.show()
             self.preset_name_input.setProperty("error", True)
+            valid = False
+            first_error = first_error or "Name muss mindestens 3 Zeichen haben"
         else:
             self.name_error_label.hide()
             self.preset_name_input.setProperty("error", False)
@@ -1934,10 +1941,14 @@ class HomePage(BasePage):
             self.prompt_error_label.setText("Prompt ist erforderlich")
             self.prompt_error_label.show()
             self.preset_prompt_input.setProperty("error", True)
+            valid = False
+            first_error = first_error or "Prompt ist erforderlich"
         elif len(prompt) < 10:
             self.prompt_error_label.setText("Prompt sollte mindestens 10 Zeichen haben")
             self.prompt_error_label.show()
             self.preset_prompt_input.setProperty("error", True)
+            valid = False
+            first_error = first_error or "Prompt sollte mindestens 10 Zeichen haben"
         else:
             self.prompt_error_label.hide()
             self.preset_prompt_input.setProperty("error", False)
@@ -1946,6 +1957,8 @@ class HomePage(BasePage):
         self.preset_name_input.style().polish(self.preset_name_input)
         self.preset_prompt_input.style().unpolish(self.preset_prompt_input)
         self.preset_prompt_input.style().polish(self.preset_prompt_input)
+
+        return valid, first_error
 
     def populate_provider_options(self):
         self.provider_models_map = self.controller.backend.provider_models()
@@ -2084,24 +2097,17 @@ class HomePage(BasePage):
 
     def save_new_preset(self):
         """Speichert ein neues Preset über das Backend nach Validierung."""
+        is_valid, error_msg = self.validate_form()
+        if not is_valid:
+            if hasattr(self.controller, 'show_toast') and error_msg:
+                self.controller.show_toast(error_msg)
+            return
+
         name = self.preset_name_input.text().strip()
         prompt = self.preset_prompt_input.toPlainText().strip()
         provider = self.provider_combo.currentText() or "OpenAI"
         model = self.model_combo.currentText() or ""
         api_type = provider
-
-        if not name:
-            if hasattr(self.controller, 'show_toast'):
-                self.controller.show_toast("Name ist erforderlich")
-            return
-        if len(name) < 3:
-            if hasattr(self.controller, 'show_toast'):
-                self.controller.show_toast("Name zu kurz")
-            return
-        if not prompt or len(prompt) < 10:
-            if hasattr(self.controller, 'show_toast'):
-                self.controller.show_toast("Prompt zu kurz")
-            return
 
         success = self.controller.backend.save_preset(name, prompt, api_type, provider, model)
         if success:
