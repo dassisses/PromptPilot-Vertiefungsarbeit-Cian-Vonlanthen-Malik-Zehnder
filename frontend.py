@@ -1753,8 +1753,8 @@ class HomePage(BasePage):
         library_card = QWidget()
         library_card.setObjectName("content_card")
         library_layout = QVBoxLayout(library_card)
-        library_layout.setSpacing(SECTION_SPACING)
-        library_layout.setContentsMargins(18, 18, 18, 18)
+        library_layout.setSpacing(CONTROL_SPACING + 2)
+        library_layout.setContentsMargins(14, 14, 14, 14)
 
         header_row = QHBoxLayout()
         header_row.setContentsMargins(0, 0, 0, 0)
@@ -1783,8 +1783,9 @@ class HomePage(BasePage):
 
         self.presets_container = QWidget()
         self.presets_grid = QGridLayout()
-        self.presets_grid.setSpacing(12)
-        self.presets_grid.setContentsMargins(6, 6, 6, 10)
+        self.presets_grid.setHorizontalSpacing(10)
+        self.presets_grid.setVerticalSpacing(10)
+        self.presets_grid.setContentsMargins(4, 6, 4, 8)
         self.presets_container.setLayout(self.presets_grid)
         self.presets_scroll.setWidget(self.presets_container)
         library_layout.addWidget(self.presets_scroll, 1)
@@ -1901,9 +1902,9 @@ class HomePage(BasePage):
         right_layout.addWidget(self.result_card, 1)
 
         self.main_splitter.addWidget(right_widget)
-        self.main_splitter.setStretchFactor(0, 7)
+        self.main_splitter.setStretchFactor(0, 8)
         self.main_splitter.setStretchFactor(1, 3)
-        self.main_splitter.setSizes([760, 440])
+        self.main_splitter.setSizes([840, 360])
         self.main_layout.addWidget(self.main_splitter)
 
         self._preset_grid_columns = self.calculate_preset_columns()
@@ -2004,9 +2005,9 @@ class HomePage(BasePage):
         """Ermittelt die Anzahl Spalten für das Preset-Grid basierend auf der verfügbaren Breite."""
         spacing = self.presets_grid.horizontalSpacing() or 0
         if spacing < 0:
-            spacing = 12
+            spacing = 10
         viewport_width = self.presets_scroll.viewport().width() or self.presets_scroll.width() or 640
-        card_target_width = 320
+        card_target_width = 260
         columns = max(1, (viewport_width + spacing) // (card_target_width + spacing))
         return int(columns)
 
@@ -2065,7 +2066,7 @@ class HomePage(BasePage):
         col = 0
         for idx, preset in filtered:
             widget = self.create_preset_widget(idx, preset)
-            widget.setMinimumWidth(260)
+            widget.setMinimumWidth(240)
             self.presets_grid.addWidget(widget, row, col)
             col += 1
             if col >= columns:
@@ -2124,18 +2125,18 @@ class HomePage(BasePage):
         card = QWidget()
         card.setObjectName("preset_card")
         layout = QVBoxLayout(card)
-        layout.setSpacing(SECTION_SPACING)
-        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(CONTROL_SPACING + 2)
+        layout.setContentsMargins(16, 14, 16, 14)
 
         header = QWidget()
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(SECTION_SPACING)
+        header_layout.setSpacing(CONTROL_SPACING)
 
         title_box = QWidget()
         title_layout = QVBoxLayout(title_box)
         title_layout.setContentsMargins(0, 0, 0, 0)
-        title_layout.setSpacing(6)
+        title_layout.setSpacing(4)
         original_name = preset["name"]
         display_name = original_name
         if len(display_name) > MAX_PRESET_NAME_LENGTH:
@@ -2162,14 +2163,14 @@ class HomePage(BasePage):
         btn_box = QWidget()
         btn_layout_h = QHBoxLayout(btn_box)
         btn_layout_h.setContentsMargins(0, 0, 0, 0)
-        btn_layout_h.setSpacing(CONTROL_SPACING)
+        btn_layout_h.setSpacing(8)
 
         # Shortcut Button
         shortcut_btn = QPushButton("Shortcut")
         shortcut_btn.setObjectName("btn_secondary")
         shortcut_btn.setToolTip("Tastenkombination festlegen")
-        shortcut_btn.setMinimumWidth(100)
-        shortcut_btn.setFixedHeight(40)
+        shortcut_btn.setMinimumWidth(80)
+        shortcut_btn.setFixedHeight(36)
         shortcut_btn.clicked.connect(lambda idx=index: self.set_shortcut(idx))
         btn_layout_h.addWidget(shortcut_btn)
 
@@ -2177,16 +2178,16 @@ class HomePage(BasePage):
         edit_btn = QPushButton("Bearbeiten")
         edit_btn.setObjectName("btn_warning")
         edit_btn.setToolTip("Preset bearbeiten")
-        edit_btn.setMinimumWidth(110)
-        edit_btn.setFixedHeight(40)
+        edit_btn.setMinimumWidth(90)
+        edit_btn.setFixedHeight(36)
         edit_btn.clicked.connect(lambda idx=index: self.edit_preset(idx))
         btn_layout_h.addWidget(edit_btn)
 
         # Execute Button
         use_btn = QPushButton("Ausführen")
         use_btn.setObjectName("btn_primary")
-        use_btn.setMinimumWidth(120)
-        use_btn.setFixedHeight(40)
+        use_btn.setMinimumWidth(100)
+        use_btn.setFixedHeight(36)
         use_btn.setToolTip("Preset mit Zwischenablage ausführen")
         use_btn.clicked.connect(lambda idx=index: self.controller.execute_preset_by_index(idx))
         btn_layout_h.addWidget(use_btn)
@@ -2194,8 +2195,8 @@ class HomePage(BasePage):
         # Delete Button
         delete_btn = QPushButton("Löschen")
         delete_btn.setObjectName("btn_danger")
-        delete_btn.setMinimumWidth(95)
-        delete_btn.setFixedHeight(40)
+        delete_btn.setMinimumWidth(80)
+        delete_btn.setFixedHeight(36)
         delete_btn.setToolTip("Preset entfernen")
         delete_btn.clicked.connect(lambda idx=index: self.delete_preset(idx))
         btn_layout_h.addWidget(delete_btn)
@@ -2205,8 +2206,8 @@ class HomePage(BasePage):
 
         prompt = preset["prompt"]
         truncated_prompt = prompt
-        if len(prompt) > 180:
-            truncated_prompt = prompt[:180].rstrip() + "…"
+        if len(prompt) > 150:
+            truncated_prompt = prompt[:150].rstrip() + "…"
 
         prompt_label = QLabel(truncated_prompt)
         prompt_label.setObjectName("preset_prompt")
