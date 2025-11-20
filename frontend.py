@@ -792,7 +792,7 @@ class APIManager(QMainWindow):
             self.statusbar_app.update_presets()
 
     def _load_tray_icon(self):
-        for icon_name in ("icon.icns", "icon.png"):
+        for icon_name in ("promtpilot_icon.icns", "promtpilot_icon.png", "icon.icns", "icon.png"):
             icon_path = resource_path(icon_name)
             if os.path.exists(icon_path):
                 icon = QIcon(icon_path)
