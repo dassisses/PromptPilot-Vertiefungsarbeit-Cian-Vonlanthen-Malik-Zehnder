@@ -1616,10 +1616,13 @@ class APIManager(QMainWindow):
                 QLabel#input_label {{ color: rgba(255,255,255,0.82); font-weight: 600; letter-spacing: 0.2px; }}
                 QLabel#hint_text {{ color: rgba(255,255,255,0.55); font-size: 13px; }}
                 QLabel#error_label {{ color: {danger}; font-size: 13px; }}
-                QLabel#preset_header {{ color: #ffffff; font-size: 16px; font-weight: 600; }}
-                QLabel#preset_meta, QLabel#presets_counter {{ color: rgba(255,255,255,0.55); font-size: 12px; }}
-                QLabel#preset_prompt {{ color: rgba(255,255,255,0.85); }}
+                QLabel#preset_header {{ color: #ffffff; font-size: 17px; font-weight: 700; }}
+                QLabel#preset_meta, QLabel#presets_counter {{ color: rgba(255,255,255,0.65); font-size: 13px; }}
+                QLabel#preset_prompt {{ color: rgba(255,255,255,0.86); font-size: 13px; }}
                 QLabel#shortcut_badge {{ background-color: rgba(255,255,255,0.12); color: #ffffff; border-radius: 999px; padding: 4px 12px; font-weight: 600; }}
+                QPushButton#shortcut_chip {{ background-color: rgba(255,255,255,0.08); color: #f5f5f7; border-radius: 10px; padding: 6px 12px; font-weight: 700; font-family: 'JetBrains Mono', 'SF Mono', monospace; }}
+                QPushButton#shortcut_chip:hover {{ background-color: rgba(255,255,255,0.14); }}
+                QPushButton#shortcut_chip[empty="true"] {{ border: 1px dashed rgba(255,255,255,0.26); background: transparent; color: rgba(255,255,255,0.85); }}
                 QLabel#toast {{ background: rgba(0,0,0,0.8); color: #ffffff; padding: 12px 20px; border-radius: 14px; font-weight: 600; }}
                 QLabel#shortcut_key {{ color: #f5f5f7; font-family: 'JetBrains Mono', 'SF Mono', monospace; font-weight: 600; }}
                 QLabel#shortcut_desc {{ color: rgba(255,255,255,0.65); }}
@@ -1678,10 +1681,13 @@ class APIManager(QMainWindow):
                 QLabel#input_label {{ color: rgba(28,28,30,0.9); font-weight: 600; letter-spacing: 0.2px; }}
                 QLabel#hint_text {{ color: rgba(60,60,67,0.6); font-size: 13px; }}
                 QLabel#error_label {{ color: {danger}; font-size: 13px; }}
-                QLabel#preset_header {{ color: #111; font-size: 16px; font-weight: 600; }}
-                QLabel#preset_meta, QLabel#presets_counter {{ color: rgba(60,60,67,0.6); font-size: 12px; }}
-                QLabel#preset_prompt {{ color: rgba(28,28,30,0.78); }}
+                QLabel#preset_header {{ color: #111; font-size: 17px; font-weight: 700; }}
+                QLabel#preset_meta, QLabel#presets_counter {{ color: rgba(60,60,67,0.65); font-size: 13px; }}
+                QLabel#preset_prompt {{ color: rgba(28,28,30,0.82); font-size: 13px; }}
                 QLabel#shortcut_badge {{ background-color: rgba(0,122,255,0.12); color: #0a84ff; border-radius: 999px; padding: 4px 12px; font-weight: 600; }}
+                QPushButton#shortcut_chip {{ background-color: rgba(0,0,0,0.04); color: #1c1c1e; border-radius: 10px; padding: 6px 12px; font-weight: 700; font-family: 'JetBrains Mono', 'SF Mono', monospace; }}
+                QPushButton#shortcut_chip:hover {{ background-color: rgba(0,122,255,0.08); color: #0a84ff; }}
+                QPushButton#shortcut_chip[empty="true"] {{ border: 1px dashed rgba(60,60,67,0.3); background: transparent; color: rgba(28,28,30,0.75); }}
                 QLabel#toast {{ background: rgba(28,28,30,0.85); color: #ffffff; padding: 12px 20px; border-radius: 14px; font-weight: 600; }}
                 QLabel#shortcut_key {{ color: #111; font-family: 'JetBrains Mono', 'SF Mono', monospace; font-weight: 600; }}
                 QLabel#shortcut_desc {{ color: rgba(28,28,30,0.6); }}
@@ -1753,8 +1759,8 @@ class HomePage(BasePage):
         library_card = QWidget()
         library_card.setObjectName("content_card")
         library_layout = QVBoxLayout(library_card)
-        library_layout.setSpacing(10)
-        library_layout.setContentsMargins(12, 12, 12, 12)
+        library_layout.setSpacing(16)
+        library_layout.setContentsMargins(18, 18, 18, 18)
 
         header_row = QHBoxLayout()
         header_row.setContentsMargins(0, 0, 0, 0)
@@ -1768,6 +1774,8 @@ class HomePage(BasePage):
         header_row.addWidget(self.preset_count_label)
         library_layout.addLayout(header_row)
         library_layout.addWidget(create_section_divider())
+
+        library_layout.addSpacing(12)
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Nach Name oder Prompt suchen...")
@@ -1783,9 +1791,9 @@ class HomePage(BasePage):
 
         self.presets_container = QWidget()
         self.presets_grid = QGridLayout()
-        self.presets_grid.setHorizontalSpacing(8)
-        self.presets_grid.setVerticalSpacing(8)
-        self.presets_grid.setContentsMargins(2, 4, 2, 6)
+        self.presets_grid.setHorizontalSpacing(16)
+        self.presets_grid.setVerticalSpacing(16)
+        self.presets_grid.setContentsMargins(8, 12, 8, 12)
         self.presets_container.setLayout(self.presets_grid)
         self.presets_scroll.setWidget(self.presets_container)
         library_layout.addWidget(self.presets_scroll, 1)
@@ -2016,11 +2024,11 @@ class HomePage(BasePage):
     # --- Preset-Liste ---
     def calculate_preset_columns(self) -> int:
         """Ermittelt die Anzahl Spalten für das Preset-Grid basierend auf der verfügbaren Breite."""
-        spacing = self.presets_grid.horizontalSpacing() or 0
+        spacing = self.presets_grid.horizontalSpacing() or 16
         if spacing < 0:
-            spacing = 10
+            spacing = 16
         viewport_width = self.presets_scroll.viewport().width() or self.presets_scroll.width() or 640
-        card_target_width = 200
+        card_target_width = 280
         columns = max(1, (viewport_width + spacing) // (card_target_width + spacing))
         return int(columns)
 
@@ -2079,7 +2087,7 @@ class HomePage(BasePage):
         col = 0
         for idx, preset in filtered:
             widget = self.create_preset_widget(idx, preset)
-            widget.setMinimumWidth(200)
+            widget.setMinimumWidth(260)
             self.presets_grid.addWidget(widget, row, col)
             col += 1
             if col >= columns:
@@ -2131,8 +2139,8 @@ class HomePage(BasePage):
         card = QWidget()
         card.setObjectName("preset_card")
         layout = QVBoxLayout(card)
-        layout.setSpacing(8)
-        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
 
         header = QWidget()
         header_layout = QHBoxLayout(header)
@@ -2142,7 +2150,7 @@ class HomePage(BasePage):
         title_box = QWidget()
         title_layout = QVBoxLayout(title_box)
         title_layout.setContentsMargins(0, 0, 0, 0)
-        title_layout.setSpacing(2)
+        title_layout.setSpacing(4)
         original_name = preset["name"]
         display_name = original_name
         if len(display_name) > MAX_PRESET_NAME_LENGTH:
@@ -2159,62 +2167,14 @@ class HomePage(BasePage):
         meta = QLabel(f"API: {meta_text}")
         meta.setObjectName("preset_meta")
         title_layout.addWidget(meta)
-        shortcut_value = preset.get("shortcut")
-        if shortcut_value:
-            badge = QLabel(format_shortcut_for_display(shortcut_value))
-            badge.setObjectName("shortcut_badge")
-            title_layout.addWidget(badge)
         header_layout.addWidget(title_box, 1)
 
-        btn_box = QWidget()
-        btn_grid = QGridLayout(btn_box)
-        btn_grid.setContentsMargins(0, 0, 0, 0)
-        btn_grid.setHorizontalSpacing(6)
-        btn_grid.setVerticalSpacing(6)
-        btn_grid.setColumnStretch(0, 1)
-        btn_grid.setColumnStretch(1, 1)
-
-        # Shortcut Button
-        shortcut_btn = QPushButton("Shortcut")
-        shortcut_btn.setObjectName("btn_secondary")
-        shortcut_btn.setToolTip("Tastenkombination festlegen")
-        shortcut_btn.setMinimumWidth(0)
-        shortcut_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        shortcut_btn.setFixedHeight(30)
-        shortcut_btn.clicked.connect(lambda idx=index: self.set_shortcut(idx))
-        btn_grid.addWidget(shortcut_btn, 0, 0)
-
-        # Edit Button
-        edit_btn = QPushButton("Bearbeiten")
-        edit_btn.setObjectName("btn_warning")
-        edit_btn.setToolTip("Preset bearbeiten")
-        edit_btn.setMinimumWidth(0)
-        edit_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        edit_btn.setFixedHeight(30)
-        edit_btn.clicked.connect(lambda idx=index: self.edit_preset(idx))
-        btn_grid.addWidget(edit_btn, 0, 1)
-
-        # Execute Button
-        use_btn = QPushButton("Ausführen")
-        use_btn.setObjectName("btn_primary")
-        use_btn.setMinimumWidth(0)
-        use_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        use_btn.setFixedHeight(30)
-        use_btn.setToolTip("Preset mit Zwischenablage ausführen")
-        use_btn.clicked.connect(lambda idx=index: self.controller.execute_preset_by_index(idx))
-        btn_grid.addWidget(use_btn, 1, 0)
-
-        # Delete Button
-        delete_btn = QPushButton("Löschen")
-        delete_btn.setObjectName("btn_danger")
-        delete_btn.setMinimumWidth(0)
-        delete_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        delete_btn.setFixedHeight(30)
-        delete_btn.setToolTip("Preset entfernen")
-        delete_btn.clicked.connect(lambda idx=index: self.delete_preset(idx))
-        btn_grid.addWidget(delete_btn, 1, 1)
-
-        header_layout.addWidget(btn_box)
+        options_btn = QPushButton("⋯")
+        options_btn.setObjectName("btn_ghost")
+        options_btn.setFixedSize(32, 32)
+        options_btn.setToolTip("Aktionen für dieses Preset")
+        options_btn.clicked.connect(lambda idx=index: self.edit_preset(idx))
+        header_layout.addWidget(options_btn, 0, Qt.AlignmentFlag.AlignTop)
         layout.addWidget(header)
 
         prompt = preset["prompt"]
@@ -2228,6 +2188,58 @@ class HomePage(BasePage):
         if truncated_prompt != prompt:
             prompt_label.setToolTip(prompt)
         layout.addWidget(prompt_label)
+
+        footer = QWidget()
+        footer_layout = QHBoxLayout(footer)
+        footer_layout.setContentsMargins(0, 0, 0, 0)
+        footer_layout.setSpacing(10)
+
+        shortcut_value = preset.get("shortcut")
+        shortcut_area = QWidget()
+        shortcut_layout = QHBoxLayout(shortcut_area)
+        shortcut_layout.setContentsMargins(0, 0, 0, 0)
+        shortcut_layout.setSpacing(6)
+        if shortcut_value:
+            shortcut_chip = QPushButton(format_shortcut_for_display(shortcut_value))
+            shortcut_chip.setObjectName("shortcut_chip")
+            shortcut_chip.setToolTip("Shortcut ändern")
+            shortcut_chip.clicked.connect(lambda idx=index: self.set_shortcut(idx))
+        else:
+            shortcut_chip = QPushButton("Shortcut festlegen")
+            shortcut_chip.setObjectName("shortcut_chip")
+            shortcut_chip.setProperty("empty", True)
+            shortcut_chip.setToolTip("Tastenkombination hinzufügen")
+            shortcut_chip.clicked.connect(lambda idx=index: self.set_shortcut(idx))
+        shortcut_chip.setFixedHeight(32)
+        shortcut_chip.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        shortcut_layout.addWidget(shortcut_chip)
+        shortcut_layout.addStretch()
+        footer_layout.addWidget(shortcut_area, 0)
+
+        footer_layout.addStretch()
+
+        edit_btn = QPushButton("Bearbeiten")
+        edit_btn.setObjectName("btn_warning")
+        edit_btn.setToolTip("Preset bearbeiten")
+        edit_btn.setFixedHeight(32)
+        edit_btn.clicked.connect(lambda idx=index: self.edit_preset(idx))
+        footer_layout.addWidget(edit_btn)
+
+        delete_btn = QPushButton("Löschen")
+        delete_btn.setObjectName("btn_danger")
+        delete_btn.setToolTip("Preset entfernen")
+        delete_btn.setFixedHeight(32)
+        delete_btn.clicked.connect(lambda idx=index: self.delete_preset(idx))
+        footer_layout.addWidget(delete_btn)
+
+        use_btn = QPushButton("Ausführen")
+        use_btn.setObjectName("btn_primary")
+        use_btn.setFixedHeight(32)
+        use_btn.setToolTip("Preset mit Zwischenablage ausführen")
+        use_btn.clicked.connect(lambda idx=index: self.controller.execute_preset_by_index(idx))
+        footer_layout.addWidget(use_btn)
+
+        layout.addWidget(footer)
 
         return card
 
