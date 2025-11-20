@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QPushButton, QComboBox,
     QFrame, QScrollArea, QMessageBox, QStackedWidget,
     QTextEdit, QDialog, QSplitter, QKeySequenceEdit,
-    QSystemTrayIcon, QMenu, QStyle
+    QSystemTrayIcon, QMenu, QStyle, QGridLayout
 )
 
 
@@ -1754,7 +1754,7 @@ class HomePage(BasePage):
         library_card.setObjectName("content_card")
         library_layout = QVBoxLayout(library_card)
         library_layout.setSpacing(SECTION_SPACING)
-        library_layout.setContentsMargins(24, 24, 24, 24)
+        library_layout.setContentsMargins(18, 18, 18, 18)
 
         header_row = QHBoxLayout()
         header_row.setContentsMargins(0, 0, 0, 0)
@@ -1782,9 +1782,10 @@ class HomePage(BasePage):
         self.presets_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         self.presets_container = QWidget()
-        self.presets_layout = QVBoxLayout(self.presets_container)
-        self.presets_layout.setSpacing(16)
-        self.presets_layout.setContentsMargins(0, 0, 0, 0)
+        self.presets_grid = QGridLayout()
+        self.presets_grid.setSpacing(12)
+        self.presets_grid.setContentsMargins(6, 6, 6, 10)
+        self.presets_container.setLayout(self.presets_grid)
         self.presets_scroll.setWidget(self.presets_container)
         library_layout.addWidget(self.presets_scroll, 1)
 
@@ -1900,10 +1901,14 @@ class HomePage(BasePage):
         right_layout.addWidget(self.result_card, 1)
 
         self.main_splitter.addWidget(right_widget)
-        self.main_splitter.setStretchFactor(0, 6)
-        self.main_splitter.setStretchFactor(1, 4)
-        self.main_splitter.setSizes([700, 500])
+        self.main_splitter.setStretchFactor(0, 7)
+        self.main_splitter.setStretchFactor(1, 3)
+        self.main_splitter.setSizes([760, 440])
         self.main_layout.addWidget(self.main_splitter)
+
+        self._preset_grid_columns = self.calculate_preset_columns()
+        self.presets_scroll.viewport().installEventFilter(self)
+        self.presets_container.installEventFilter(self)
 
         self.current_search = ""
         self.update_presets_list()
@@ -1995,10 +2000,28 @@ class HomePage(BasePage):
         self.result_card.hide()
 
     # --- Preset-Liste ---
+    def calculate_preset_columns(self) -> int:
+        """Ermittelt die Anzahl Spalten für das Preset-Grid basierend auf der verfügbaren Breite."""
+        spacing = self.presets_grid.horizontalSpacing() or 0
+        if spacing < 0:
+            spacing = 12
+        viewport_width = self.presets_scroll.viewport().width() or self.presets_scroll.width() or 640
+        card_target_width = 320
+        columns = max(1, (viewport_width + spacing) // (card_target_width + spacing))
+        return int(columns)
+
+    def eventFilter(self, obj, event):
+        if obj in (self.presets_scroll.viewport(), self.presets_container) and event.type() == QEvent.Type.Resize:
+            columns = self.calculate_preset_columns()
+            if columns != getattr(self, "_preset_grid_columns", columns):
+                self._preset_grid_columns = columns
+                self.update_presets_list()
+        return super().eventFilter(obj, event)
+
     def update_presets_list(self):
         # Alle Widgets entfernen
-        for i in reversed(range(self.presets_layout.count())):
-            item = self.presets_layout.takeAt(i)
+        while self.presets_grid.count():
+            item = self.presets_grid.takeAt(0)
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
@@ -2032,14 +2055,26 @@ class HomePage(BasePage):
             empty_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
             empty_text.setObjectName("section_subtitle")
             empty_layout.addWidget(empty_text)
-            self.presets_layout.addWidget(empty)
-            self.presets_layout.addStretch()
+            self.presets_grid.addWidget(empty, 0, 0)
+            self.presets_grid.setColumnStretch(0, 1)
+            self.presets_grid.setRowStretch(1, 1)
             return
 
+        columns = max(1, getattr(self, "_preset_grid_columns", 1))
+        row = 0
+        col = 0
         for idx, preset in filtered:
-            self.presets_layout.addWidget(self.create_preset_widget(idx, preset))
+            widget = self.create_preset_widget(idx, preset)
+            widget.setMinimumWidth(260)
+            self.presets_grid.addWidget(widget, row, col)
+            col += 1
+            if col >= columns:
+                row += 1
+                col = 0
 
-        self.presets_layout.addStretch()
+        for c in range(columns):
+            self.presets_grid.setColumnStretch(c, 1)
+        self.presets_grid.setRowStretch(row + 1, 1)
 
     def filter_presets(self, text: str):
         """Filtert die Preset-Liste basierend auf der Sucheingabe."""
