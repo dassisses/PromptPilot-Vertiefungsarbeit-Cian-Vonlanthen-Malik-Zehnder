@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QPushButton, QComboBox,
     QFrame, QScrollArea, QMessageBox, QStackedWidget,
     QTextEdit, QDialog, QSplitter, QKeySequenceEdit,
-    QSystemTrayIcon, QMenu, QStyle, QGridLayout
+    QSystemTrayIcon, QMenu, QStyle, QGridLayout, QSizePolicy
 )
 
 
@@ -2161,45 +2161,52 @@ class HomePage(BasePage):
         header_layout.addWidget(title_box, 1)
 
         btn_box = QWidget()
-        btn_layout_h = QHBoxLayout(btn_box)
-        btn_layout_h.setContentsMargins(0, 0, 0, 0)
-        btn_layout_h.setSpacing(6)
+        btn_grid = QGridLayout(btn_box)
+        btn_grid.setContentsMargins(0, 0, 0, 0)
+        btn_grid.setHorizontalSpacing(6)
+        btn_grid.setVerticalSpacing(6)
+        btn_grid.setColumnStretch(0, 1)
+        btn_grid.setColumnStretch(1, 1)
 
         # Shortcut Button
         shortcut_btn = QPushButton("Shortcut")
         shortcut_btn.setObjectName("btn_secondary")
         shortcut_btn.setToolTip("Tastenkombination festlegen")
-        shortcut_btn.setMinimumWidth(68)
+        shortcut_btn.setMinimumWidth(0)
+        shortcut_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         shortcut_btn.setFixedHeight(30)
         shortcut_btn.clicked.connect(lambda idx=index: self.set_shortcut(idx))
-        btn_layout_h.addWidget(shortcut_btn)
+        btn_grid.addWidget(shortcut_btn, 0, 0)
 
         # Edit Button
         edit_btn = QPushButton("Bearbeiten")
         edit_btn.setObjectName("btn_warning")
         edit_btn.setToolTip("Preset bearbeiten")
-        edit_btn.setMinimumWidth(76)
+        edit_btn.setMinimumWidth(0)
+        edit_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         edit_btn.setFixedHeight(30)
         edit_btn.clicked.connect(lambda idx=index: self.edit_preset(idx))
-        btn_layout_h.addWidget(edit_btn)
+        btn_grid.addWidget(edit_btn, 0, 1)
 
         # Execute Button
         use_btn = QPushButton("Ausführen")
         use_btn.setObjectName("btn_primary")
-        use_btn.setMinimumWidth(88)
+        use_btn.setMinimumWidth(0)
+        use_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         use_btn.setFixedHeight(30)
         use_btn.setToolTip("Preset mit Zwischenablage ausführen")
         use_btn.clicked.connect(lambda idx=index: self.controller.execute_preset_by_index(idx))
-        btn_layout_h.addWidget(use_btn)
+        btn_grid.addWidget(use_btn, 1, 0)
 
         # Delete Button
         delete_btn = QPushButton("Löschen")
         delete_btn.setObjectName("btn_danger")
-        delete_btn.setMinimumWidth(68)
+        delete_btn.setMinimumWidth(0)
+        delete_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         delete_btn.setFixedHeight(30)
         delete_btn.setToolTip("Preset entfernen")
         delete_btn.clicked.connect(lambda idx=index: self.delete_preset(idx))
-        btn_layout_h.addWidget(delete_btn)
+        btn_grid.addWidget(delete_btn, 1, 1)
 
         header_layout.addWidget(btn_box)
         layout.addWidget(header)
