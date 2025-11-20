@@ -116,10 +116,10 @@ class PromptPilotBackend:
         """Initialize SDK clients where applicable."""
 
         provider = provider or ""
-        provider_key = provider.title()
+        provider_key = provider.lower()
 
-        if provider_key == "OpenAI":
-            api_key = self._get_api_key(provider_key)
+        if provider_key == "openai":
+            api_key = self._get_api_key(provider)
             if api_key:
                 try:
                     self.client = openai.OpenAI(api_key=api_key)
