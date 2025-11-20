@@ -16,3 +16,5 @@ fi
 source "$VENV_DIR/bin/activate"
 cd "$PROJECT_ROOT"
 exec "$PYTHON_BIN" "$PROJECT_ROOT/main.py"
+
+
