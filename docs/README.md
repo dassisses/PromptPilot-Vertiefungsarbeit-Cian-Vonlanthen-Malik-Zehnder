@@ -10,6 +10,8 @@ Ein modernes Python-Tool zur Verwaltung und Automatisierung von LLM-Prompts mit 
 
 PromptPilot automatisiert repetitive Aufgaben mit Large Language Models (LLMs). Erstelle wiederverwendbare Prompt-Vorlagen (Presets) und führe sie mit benutzerdefinierten Keyboard-Shortcuts aus - direkt aus der Zwischenablage.
 
+👉 Ein durchspielbares Proof-of-Concept findest du in [POC.md](POC.md).
+
 ### Hauptfunktionen
 
 ✅ **Preset-Verwaltung** - Erstelle, bearbeite und organisiere Prompt-Vorlagen  
