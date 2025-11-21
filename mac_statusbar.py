@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from typing import Dict, Set, TYPE_CHECKING
 
@@ -184,3 +185,16 @@ class MacStatusBarApp(QObject):
         title = f"{preset_name} abgeschlossen"
         body = message or "Preset erfolgreich beendet."
         self._notify(title, body, QSystemTrayIcon.Information)
+        if IS_NATIVE_MAC:
+            self._send_push_notification(title, body)
+
+    def _send_push_notification(self, title: str, message: str) -> None:
+        """Send a native macOS push notification for successful preset runs."""
+        try:
+            escaped_title = title.replace("\"", "\\\"")
+            escaped_message = message.replace("\"", "\\\"")
+            script = f'display notification "{escaped_message}" with title "{escaped_title}"'
+            subprocess.run(["osascript", "-e", script], check=False)
+        except Exception:
+            # If native notifications fail, silently ignore to not impact preset flow.
+            pass
