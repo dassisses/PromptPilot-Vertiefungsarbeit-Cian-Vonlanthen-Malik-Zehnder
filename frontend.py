@@ -1607,29 +1607,43 @@ class APIManager(QMainWindow):
                 QPushButton#nav_button:hover {{ background-color: rgba(255,255,255,0.08); }}
                 .content_card, .preset_card, .shortcut_card, #result_panel {{ background-color: rgba(44,44,46,0.9); border-radius: 18px; border: 1px solid rgba(255,255,255,0.08); }}
                 #page_stack {{ background: transparent; }}
-                QPushButton#btn_primary {{ background-color: {accent}; color: #ffffff; }}
-                QPushButton#btn_primary:hover {{ background-color: #0a84ff; }}
-                QPushButton#btn_secondary {{ background-color: rgba(255,255,255,0.12); color: #f5f5f7; }}
-                QPushButton#btn_secondary:hover {{ background-color: rgba(255,255,255,0.2); }}
-                QPushButton#btn_success {{ background-color: {success}; color: #0b0b0c; }}
-                QPushButton#btn_danger {{ background-color: {danger}; color: #ffffff; }}
-                QPushButton#btn_warning {{ background-color: rgba(255, 204, 0, 0.3); color: #ffe066; }}
-                QPushButton#btn_ghost {{ background-color: transparent; color: {accent}; padding: 6px 12px; border-radius: 10px; }}
+
+                /* Blaue Button-Stile */
+                QPushButton#btn_primary,
+                QPushButton#btn_secondary,
+                QPushButton#btn_success,
+                QPushButton#btn_danger,
+                QPushButton#btn_warning {{
+                    background-color: #007aff; /* Blau */
+                    color: #ffffff;
+                }}
+                QPushButton#btn_primary:hover,
+                QPushButton#btn_secondary:hover,
+                QPushButton#btn_success:hover,
+                QPushButton#btn_danger:hover,
+                QPushButton#btn_warning:hover {{
+                    background-color: #0a84ff; /* Dunkleres Blau beim Hover */
+                }}
+
+                QPushButton#btn_ghost {{ background-color: transparent; color: #007aff; padding: 6px 12px; border-radius: 10px; }}
                 QPushButton#btn_ghost:hover {{ background-color: rgba(255,255,255,0.08); }}
-                QLineEdit, QTextEdit, QComboBox, QKeySequenceEdit {{ background: rgba(58,58,60,0.95); border: 1px solid rgba(255,255,255,0.12); color: #f5f5f7; border-radius: 12px; selection-background-color: {accent}; selection-color: #ffffff; }}
-                QLineEdit[error="true"], QTextEdit[error="true"], QKeySequenceEdit[error="true"] {{ border: 1px solid {danger}; }}
+                QLineEdit, QTextEdit, QComboBox, QKeySequenceEdit {{ background: rgba(58,58,60,0.95); border: 1px solid rgba(255,255,255,0.12); color: #f5f5f7; border-radius: 12px; selection-background-color: #007aff; selection-color: #ffffff; }}
+                QLineEdit[error="true"], QTextEdit[error="true"], QKeySequenceEdit[error="true"] {{ border: 1px solid #ff453a; }} /* Danger-Farbe beibehalten, da es keine Schaltfläche ist */
                 QLabel#section_title {{ color: #ffffff; }}
                 QLabel#section_subtitle {{ color: rgba(255,255,255,0.65); }}
                 QLabel#input_label {{ color: rgba(255,255,255,0.82); font-weight: 600; letter-spacing: 0.2px; }}
                 QLabel#hint_text {{ color: rgba(255,255,255,0.55); font-size: 13px; }}
-                QLabel#error_label {{ color: {danger}; font-size: 13px; }}
+                QLabel#error_label {{ color: #ff453a; font-size: 13px; }} /* Danger-Farbe beibehalten */
                 QLabel#preset_header {{ color: #ffffff; font-size: 17px; font-weight: 700; }}
                 QLabel#preset_meta, QLabel#presets_counter {{ color: rgba(255,255,255,0.65); font-size: 13px; }}
                 QLabel#preset_prompt {{ color: rgba(255,255,255,0.86); font-size: 13px; }}
                 QLabel#shortcut_badge {{ background-color: rgba(255,255,255,0.12); color: #ffffff; border-radius: 999px; padding: 4px 12px; font-weight: 600; }}
-                QPushButton#shortcut_chip {{ background-color: rgba(10,132,255,0.18); color: #e4f0ff; border: 1px solid rgba(0,122,255,0.55); border-radius: 10px; padding: 6px 12px; font-weight: 700; font-family: 'JetBrains Mono', 'SF Mono', monospace; }}
-                QPushButton#shortcut_chip:hover {{ background-color: rgba(10,132,255,0.26); color: #ffffff; }}
+
+                /* Shortcut Chip auf Blau geändert */
+                QPushButton#shortcut_chip {{ background-color: rgba(0,122,255,0.3); color: #e4f0ff; border: 1px solid rgba(0,122,255,0.55); border-radius: 10px; padding: 6px 12px; font-weight: 700; font-family: 'JetBrains Mono', 'SF Mono', monospace; }}
+                QPushButton#shortcut_chip:hover {{ background-color: rgba(0,122,255,0.45); color: #ffffff; }}
                 QPushButton#shortcut_chip[empty="true"] {{ border: 1px dashed rgba(255,255,255,0.38); background: transparent; color: rgba(228,240,255,0.9); }}
+
                 QLabel#toast {{ background: rgba(0,0,0,0.8); color: #ffffff; padding: 12px 20px; border-radius: 14px; font-weight: 600; }}
                 QLabel#shortcut_key {{ color: #f5f5f7; font-family: 'JetBrains Mono', 'SF Mono', monospace; font-weight: 600; }}
                 QLabel#shortcut_desc {{ color: rgba(255,255,255,0.65); }}
