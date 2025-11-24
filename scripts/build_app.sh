@@ -47,6 +47,9 @@ ensure_file "$PROJECT_ROOT/settings.json" '{
 log "Räume alte Build-Artefakte auf …"
 rm -rf "$DIST_DIR" "$BUILD_DIR"
 
+log "Wechsle ins Projektverzeichnis …"
+cd "$PROJECT_ROOT"
+
 log "Starte PyInstaller Build …"
 "$PYTHON_BIN" -m PyInstaller "$SPEC_FILE" --clean --noconfirm
 
