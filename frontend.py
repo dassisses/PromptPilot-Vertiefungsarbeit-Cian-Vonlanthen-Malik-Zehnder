@@ -1608,21 +1608,35 @@ class APIManager(QMainWindow):
                 .content_card, .preset_card, .shortcut_card, #result_panel {{ background-color: rgba(44,44,46,0.9); border-radius: 18px; border: 1px solid rgba(255,255,255,0.08); }}
                 #page_stack {{ background: transparent; }}
 
-                /* Blaue Button-Stile */
+                /* Blaue Button-Stile (Standard) */
                 QPushButton#btn_primary,
                 QPushButton#btn_secondary,
-                QPushButton#btn_success,
-                QPushButton#btn_danger,
                 QPushButton#btn_warning {{
                     background-color: #007aff; /* Blau */
                     color: #ffffff;
                 }}
                 QPushButton#btn_primary:hover,
                 QPushButton#btn_secondary:hover,
-                QPushButton#btn_success:hover,
-                QPushButton#btn_danger:hover,
                 QPushButton#btn_warning:hover {{
                     background-color: #0a84ff; /* Dunkleres Blau beim Hover */
+                }}
+
+                /* Speichern-Button auf Grün */
+                QPushButton#btn_success {{
+                    background-color: #34c759; /* Grün */
+                    color: #ffffff;
+                }}
+                QPushButton#btn_success:hover {{
+                    background-color: #30d158; /* Helleres Grün beim Hover */
+                }}
+
+                /* Löschen-Button auf Rot */
+                QPushButton#btn_danger {{
+                    background-color: #ff3b30; /* Rot */
+                    color: #ffffff;
+                }}
+                QPushButton#btn_danger:hover {{
+                    background-color: #ff453a; /* Helleres Rot beim Hover */
                 }}
 
                 QPushButton#btn_ghost {{ background-color: transparent; color: #007aff; padding: 6px 12px; border-radius: 10px; }}
