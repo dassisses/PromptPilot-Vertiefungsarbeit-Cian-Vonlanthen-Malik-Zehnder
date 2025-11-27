@@ -1,6 +1,7 @@
 import json
 import os
 import platform
+import shutil
 import sys
 import urllib.error
 import urllib.request
@@ -19,17 +20,61 @@ def get_platform() -> str:
     return "linux"
 
 
-def resource_path(filename: str) -> str:
-    """Resolve resource paths for dev and PyInstaller bundle modes."""
-    if hasattr(sys, "_MEIPASS"):
-        return os.path.join(sys._MEIPASS, "resources", filename)
+APP_NAME = "PromptPilot"
 
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    appdata_dir = os.path.join(base_dir, "appdata")
-    candidate = os.path.join(appdata_dir, filename)
-    if os.path.exists(candidate):
-        return candidate
-    return os.path.join(base_dir, filename)
+
+def _app_data_dir() -> str:
+    """Return a writable directory for user data."""
+    plat = get_platform()
+    if plat == "windows":
+        base = os.environ.get("APPDATA") or os.path.expanduser("~\\AppData\\Roaming")
+        path = os.path.join(base, APP_NAME)
+    elif plat == "mac":
+        path = os.path.join(os.path.expanduser("~/Library/Application Support"), APP_NAME)
+    else:
+        base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+        path = os.path.join(base, APP_NAME.lower())
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _bundled_resource_path(filename: str) -> str:
+    """Return the location of a file packaged with the app (read-only)."""
+    candidates = []
+    if hasattr(sys, "_MEIPASS"):
+        base = sys._MEIPASS
+        candidates.extend([
+            os.path.join(base, filename),
+            os.path.join(base, "resources", filename),
+        ])
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        candidates.extend([
+            os.path.join(base_dir, "resources", filename),
+            os.path.join(base_dir, filename),
+        ])
+
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return candidate
+    return candidates[0] if candidates else filename
+
+
+def resource_path(filename: str) -> str:
+    """
+    Resolve resource paths for dev and PyInstaller bundle modes.
+
+    - JSON files are stored in a writable, persistent app data directory.
+    - Other assets prefer user overrides but fall back to bundled resources.
+    """
+    if filename.lower().endswith(".json"):
+        return os.path.join(_app_data_dir(), filename)
+
+    user_override = os.path.join(_app_data_dir(), filename)
+    if os.path.exists(user_override):
+        return user_override
+
+    return _bundled_resource_path(filename)
 
 
 PRESETS_FILE = resource_path("presets.json")
@@ -77,29 +122,33 @@ class PromptPilotBackend:
         os.makedirs(os.path.dirname(self.preset_file) or ".", exist_ok=True)
         os.makedirs(os.path.dirname(self.credentials_file) or ".", exist_ok=True)
         os.makedirs(os.path.dirname(self.settings_file) or ".", exist_ok=True)
-        # Initialize presets.json if not exists
-        if not os.path.exists(self.preset_file):
-            default_presets = [
-                {
-                    "name": "Translation to Spanish",
-                    "prompt": "Uebersetze mir folgenden text auf spanisch: ",
-                    "api_type": "chatgpt",
-                    "provider": "OpenAI",
-                    "model": PROVIDER_REGISTRY["OpenAI"]["default_model"],
-                }
-            ]
-            with open(self.preset_file, 'w') as f:
-                json.dump(default_presets, f, indent=2)
 
-        # Initialize credentials.json if not exists
-        if not os.path.exists(self.credentials_file):
-            with open(self.credentials_file, 'w') as f:
-                json.dump([], f, indent=2)
+        def _ensure_json(target_path: str, default_payload, source_name: str):
+            if os.path.exists(target_path):
+                return
+            bundled = _bundled_resource_path(source_name)
+            try:
+                if os.path.exists(bundled):
+                    shutil.copyfile(bundled, target_path)
+                    return
+            except Exception:
+                # Fallback to default payload when copy fails (e.g. read-only bundle)
+                pass
+            with open(target_path, 'w') as f:
+                json.dump(default_payload, f, indent=2)
 
-        if not os.path.exists(self.settings_file):
-            default_settings = {"theme": "dark", "show_shortcut": ""}
-            with open(self.settings_file, 'w') as f:
-                json.dump(default_settings, f, indent=2)
+        default_presets = [
+            {
+                "name": "Translation to Spanish",
+                "prompt": "Uebersetze mir folgenden text auf spanisch: ",
+                "api_type": "chatgpt",
+                "provider": "OpenAI",
+                "model": PROVIDER_REGISTRY["OpenAI"]["default_model"],
+            }
+        ]
+        _ensure_json(self.preset_file, default_presets, "presets.json")
+        _ensure_json(self.credentials_file, [], "credentials.json")
+        _ensure_json(self.settings_file, {"theme": "dark", "show_shortcut": ""}, "settings.json")
 
     def _get_api_key(self, provider: str) -> Optional[str]:
         """Return the API key for a provider if available."""

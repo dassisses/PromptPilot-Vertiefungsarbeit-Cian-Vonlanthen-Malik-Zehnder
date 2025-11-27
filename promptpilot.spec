@@ -47,10 +47,8 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,
     name="PromptPilot",
     console=False,
     debug=False,
@@ -58,8 +56,18 @@ exe = EXE(
     upx=True,
 )
 
-app = BUNDLE(
+coll = COLLECT(
     exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    name="PromptPilot",
+)
+
+app = BUNDLE(
+    coll,
     name="PromptPilot.app",
     icon=os.path.join(PROJECT_ROOT, 'icon.icns') if os.path.exists(os.path.join(PROJECT_ROOT, 'icon.icns')) else None,
     bundle_identifier="com.promptpilot.app"
