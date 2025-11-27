@@ -5,6 +5,7 @@ import sys
 from PyInstaller.utils.hooks import collect_submodules
 
 PROJECT_ROOT = os.getcwd()
+ICONS_DIR = os.path.join(PROJECT_ROOT, "resources", "icons")
 
 VENV_PATH = os.path.join(PROJECT_ROOT, '.venv')
 PY_MAJOR = sys.version_info.major
@@ -32,7 +33,9 @@ a = Analysis(
         (os.path.join(PROJECT_ROOT, 'presets.json'), '.'),
         (os.path.join(PROJECT_ROOT, 'settings.json'), '.'),
         (os.path.join(PROJECT_ROOT, 'credentials.json'), '.'),
-        (os.path.join(PROJECT_ROOT, 'promtpilot_icon.png'), 'resources'),
+        (os.path.join(ICONS_DIR, 'promtpilot_icon_tray.png'), os.path.join('resources', 'icons')),
+        (os.path.join(ICONS_DIR, 'promtpilot_icon_app.png'), os.path.join('resources', 'icons')),
+        (os.path.join(ICONS_DIR, 'icon.icns'), os.path.join('resources', 'icons')),
     ],
     hiddenimports=hiddenimports,
     hookspath=[],
@@ -69,6 +72,6 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name="PromptPilot.app",
-    icon=os.path.join(PROJECT_ROOT, 'icon.icns') if os.path.exists(os.path.join(PROJECT_ROOT, 'icon.icns')) else None,
+    icon=os.path.join(ICONS_DIR, 'icon.icns') if os.path.exists(os.path.join(ICONS_DIR, 'icon.icns')) else None,
     bundle_identifier="com.promptpilot.app"
 )

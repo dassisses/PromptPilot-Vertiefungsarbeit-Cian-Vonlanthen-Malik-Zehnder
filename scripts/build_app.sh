@@ -7,8 +7,10 @@ PYTHON_BIN="$VENV_DIR/bin/python"
 SPEC_FILE="$PROJECT_ROOT/promptpilot.spec"
 DIST_DIR="$PROJECT_ROOT/dist"
 BUILD_DIR="$PROJECT_ROOT/build"
-ICON_PNG="$PROJECT_ROOT/promtpilot_icon.png"
-ICON_ICNS="$PROJECT_ROOT/icon.icns"
+ICON_DIR="$PROJECT_ROOT/resources/icons"
+APP_ICON_PNG="$ICON_DIR/promtpilot_icon_app.png"
+TRAY_ICON_PNG="$ICON_DIR/promtpilot_icon_tray.png"
+ICON_ICNS="$ICON_DIR/icon.icns"
 
 log() { printf "[build] %s\n" "$*"; }
 
@@ -26,8 +28,8 @@ ensure_icon() {
     return 0
   fi
 
-  if [[ ! -f "$ICON_PNG" ]]; then
-    log "⚠️  Kein Icon gefunden ($ICON_PNG) – Bundle nutzt Standard-Icon."
+  if [[ ! -f "$APP_ICON_PNG" ]]; then
+    log "⚠️  Kein App-Icon gefunden ($APP_ICON_PNG) – Bundle nutzt Standard-Icon."
     return 0
   fi
 
@@ -41,14 +43,14 @@ ensure_icon() {
     return 0
   fi
 
-  log "Erzeuge icon.icns aus $ICON_PNG …"
+  log "Erzeuge icon.icns aus $APP_ICON_PNG …"
   tmp_root="$(mktemp -d)"
   tmp_iconset="$tmp_root/icon.iconset"
   mkdir -p "$tmp_iconset"
   for size in 16 32 128 256 512; do
-    sips -z "$size" "$size" "$ICON_PNG" --out "$tmp_iconset/icon_${size}x${size}.png" >/dev/null
+    sips -z "$size" "$size" "$APP_ICON_PNG" --out "$tmp_iconset/icon_${size}x${size}.png" >/dev/null
     retina=$((size * 2))
-    sips -z "$retina" "$retina" "$ICON_PNG" --out "$tmp_iconset/icon_${size}x${size}@2x.png" >/dev/null
+    sips -z "$retina" "$retina" "$APP_ICON_PNG" --out "$tmp_iconset/icon_${size}x${size}@2x.png" >/dev/null
   done
   iconutil -c icns -o "$ICON_ICNS" "$tmp_iconset" >/dev/null
   rm -rf "$tmp_root"
@@ -66,6 +68,7 @@ log "Aktualisiere pip und installiere Abhängigkeiten …"
 "$PYTHON_BIN" -m pip install --upgrade pyinstaller >/dev/null
 
 log "Stelle Default-Ressourcen bereit …"
+mkdir -p "$ICON_DIR"
 ensure_file "$PROJECT_ROOT/presets.json" '[
   {
     "name": "Translation to Spanish",
