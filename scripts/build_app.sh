@@ -42,13 +42,16 @@ ensure_icon() {
   fi
 
   log "Erzeuge icon.icns aus $ICON_PNG …"
-  tmp_iconset="$(mktemp -d)"
-  for size in 16 32 64 128 256 512; do
+  tmp_root="$(mktemp -d)"
+  tmp_iconset="$tmp_root/icon.iconset"
+  mkdir -p "$tmp_iconset"
+  for size in 16 32 128 256 512; do
     sips -z "$size" "$size" "$ICON_PNG" --out "$tmp_iconset/icon_${size}x${size}.png" >/dev/null
-    sips -z $((size * 2)) $((size * 2)) "$ICON_PNG" --out "$tmp_iconset/icon_${size}x${size}@2x.png" >/dev/null
+    retina=$((size * 2))
+    sips -z "$retina" "$retina" "$ICON_PNG" --out "$tmp_iconset/icon_${size}x${size}@2x.png" >/dev/null
   done
   iconutil -c icns -o "$ICON_ICNS" "$tmp_iconset" >/dev/null
-  rm -rf "$tmp_iconset"
+  rm -rf "$tmp_root"
   log "icon.icns erzeugt: $ICON_ICNS"
 }
 
