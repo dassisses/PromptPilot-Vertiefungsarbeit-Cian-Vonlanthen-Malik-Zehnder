@@ -6,6 +6,7 @@ from PyInstaller.utils.hooks import collect_submodules
 
 PROJECT_ROOT = os.getcwd()
 ICONS_DIR = os.path.join(PROJECT_ROOT, "resources", "icons")
+APP_ICON_PNG = os.path.join(ICONS_DIR, "promtpilot_icon_app.png")
 
 VENV_PATH = os.path.join(PROJECT_ROOT, '.venv')
 PY_MAJOR = sys.version_info.major
@@ -72,6 +73,10 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name="PromptPilot.app",
-    icon=os.path.join(ICONS_DIR, 'icon.icns') if os.path.exists(os.path.join(ICONS_DIR, 'icon.icns')) else None,
+    icon=(
+        os.path.join(ICONS_DIR, 'icon.icns')
+        if os.path.exists(os.path.join(ICONS_DIR, 'icon.icns'))
+        else (APP_ICON_PNG if os.path.exists(APP_ICON_PNG) else None)
+    ),
     bundle_identifier="com.promptpilot.app"
 )
