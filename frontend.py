@@ -7,8 +7,9 @@ from typing import Optional
 from backend import APIBackend, resource_path, get_platform
 
 PLATFORM = get_platform()
+IS_BUNDLED = hasattr(sys, "_MEIPASS")
 
-if PLATFORM == "windows":
+if PLATFORM in ("windows",):
     try:
         from pynput import keyboard as _pynput_keyboard
         PYNPUT_AVAILABLE = True
@@ -18,6 +19,8 @@ if PLATFORM == "windows":
 else:
     _pynput_keyboard = None
     PYNPUT_AVAILABLE = False
+
+Quartz = None
 
 from PySide6.QtCore import Qt, QTimer, QEvent
 from PySide6.QtGui import QFont, QAction, QKeySequence, QPalette, QColor, QIcon
@@ -30,13 +33,9 @@ from PySide6.QtWidgets import (
 )
 
 
-MAC_ACCESSIBILITY_TRUSTED = True
-
-
-def _is_process_trusted() -> bool:
-    # PyInstaller gibt bei macOS immer False zurück.
-    # Wir deaktivieren die native Abfrage vollständig.
-    return True
+def _is_process_trusted(prompt: bool = False) -> bool:
+    """Placeholder for macOS trust check (disabled hotkeys)."""
+    return PLATFORM != "mac"
 
 
 # ===== HELPER FUNCTIONS (müssen vor den Klassen definiert sein) =====
@@ -608,7 +607,10 @@ class APIManager(QMainWindow):
         # Backend frühzeitig initialisieren, damit Einstellungen gelesen werden können
         self.backend = APIBackend()
 
-        self.global_hotkeys_supported = self._platform == "windows" and PYNPUT_AVAILABLE
+        self.mac_accessibility_ok = self._platform != "mac"
+
+        # Hotfix: globale Hotkeys nur auf Windows; macOS deaktiviert (crash in HIToolbox/pynput)
+        self.global_hotkeys_supported = (self._platform == "windows" and PYNPUT_AVAILABLE)
 
         # Verwaltung von Shortcuts
         self.preset_shortcuts = {}
