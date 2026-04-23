@@ -19,7 +19,6 @@ ENV/
 
 # Local app data
 presets.json
-credentials.json
 settings.json
 run_promptpilot.command
 
