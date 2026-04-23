@@ -11,4 +11,4 @@ else {
     & "$VenvDir\Scripts\pip.exe" install PySide6 pyperclip openai pynput
 }
 
-"Virtuelle Umgebung installiert. Aktiviere sie mit `& \"$VenvDir\\Scripts\\activate.ps1\"`."
+"Virtuelle Umgebung installiert. Aktiviere sie mit & '$VenvDir\Scripts\activate.ps1'."
